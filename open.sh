@@ -2,7 +2,7 @@
 set -euo pipefail
 
 herdr="${HERDR_BIN_PATH:-herdr}"
-plugin_id="${HERDR_PLUGIN_ID:-dev.dir-picker}"
+plugin_id="${HERDR_PLUGIN_ID:-dev.herdr-launcher}"
 
 launch_dir="${PWD}"
 pane_json="$("$herdr" pane current 2>/dev/null || true)"
@@ -19,6 +19,6 @@ launch_dir="${launch_dir:-$PWD}"
 
 "$herdr" plugin pane open \
   --plugin "$plugin_id" \
-  --entrypoint picker \
+  --entrypoint launcher \
   --cwd "$launch_dir" \
   --env "LAUNCH_DIR=$launch_dir"

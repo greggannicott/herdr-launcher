@@ -1,20 +1,20 @@
-id = "dev.dir-picker"
+id = "dev.herdr-launcher"
 name = "herdr-launcher"
 version = "0.0.1"
-min_herdr_version = "0.8.0"
+min_herdr_version = "0.7.5"
 description = "Custom launcher for herdr"
 platforms = ["macos", "linux"]
 
 [[actions]]
-id = "open-picker"
-title = "Pick a command"
+id = "open-launcher"
+title = "Open launcher"
 contexts = ["workspace"]
 command = ["bash", "open.sh"]
 
 [[panes]]
-id = "picker"
-title = "Command Picker"
+id = "launcher"
+title = "Command Launcher"
 placement = "popup"
 width = "80%"
 height = "80%"
-command = ["bash", "picker.sh"]
+command = ["bash", "launcher.sh"]
