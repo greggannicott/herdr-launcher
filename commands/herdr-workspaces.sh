@@ -8,13 +8,13 @@ if [[ -z "$list" ]]; then
   exit 0
 fi
 
-printf '%s' "$list" | jq -r '
+printf '%s' "$list" | jq -r --arg q "'" '
   try (
     .result.workspaces[]
     | select(.focused == false)
     | {
         type: "herdr-workspace-switch",
-        label: ("Switch to " + .label),
+        label: ("Switch to " + $q + .label + $q),
         payload: { workspace_id: .workspace_id }
       }
     | @json
