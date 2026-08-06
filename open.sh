@@ -20,5 +20,4 @@ launch_dir="${launch_dir:-$PWD}"
 "$herdr" plugin pane open \
   --plugin "$plugin_id" \
   --entrypoint launcher \
-  --cwd "$launch_dir" \
   --env "LAUNCH_DIR=$launch_dir"
