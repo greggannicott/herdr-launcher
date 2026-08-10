@@ -147,13 +147,21 @@ if [ "$obsidian" = true ]; then
         '{
             name: $name,
             jiraId: $jiraId,
-            branch: $branch,
             context: "Work",
             ongoing: false,
             projectStatus: "02 - In Progress",
+            parents: [
+                {
+                    projectFile: "Projects/Work/Ironstream Hub Backend",
+                    branch: $branch
+                }
+            ]
         }')
 
-    curl -s "http://localhost:8082/projects/" --data "$payload" | jq
+    curl -s "http://localhost:8082/projects/" \
+        -H "Content-Type: application/json" \
+        --data "$payload" | jq
+
 fi
 
 # Copy branch name to clipboard as it might be handy
