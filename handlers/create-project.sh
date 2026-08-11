@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+herdr="${HERDR_BIN_PATH:-herdr}"
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-for helper in output-heading check-exit-code output-general-message output-error-message create-worktree install-dependencies; do
+for helper in output-heading check-exit-code output-general-message output-error-message; do
   # shellcheck source=/dev/null
   source "$plugin_root/helpers/$helper.sh"
 done
@@ -28,7 +29,6 @@ create_worktree_for_id ()
 {
     id=$1
     branch=$2
-    should_install=$3
 
     ## Obtain details regarding the repo
 
@@ -42,22 +42,31 @@ create_worktree_for_id ()
         exit 1
     fi
 
-    create_worktree "$repo_path" "$origin_branch" "$branch"
-
-    if [ "$should_install" = true ]; then
-        output_general_message "Installing dependencies for $id"
-        install_dependencies "$id"
+    base_ref="origin/$origin_branch"
+    if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+        base_ref="$origin_branch"
     fi
+
+    output_heading "Creating worktree and workspace for $id"
+    output_general_message "Repo: $repo_path"
+    output_general_message "Branch: $branch"
+    output_general_message "Base: $base_ref"
+
+    git -C "$repo_path" fetch origin --quiet || output_error_message "git fetch failed; using local ref for base"
+
+    "$herdr" worktree create \
+        --cwd "$repo_path" \
+        --branch "$branch" \
+        --base "$base_ref" \
+        --no-focus
 }
 
 # Setup possible options
-UI_WORKTREE_OPTION="Create UI Worktree"
 BACKEND_WORKTREE_OPTION="Create Backend Worktree"
 OBSIDIAN_PROJECT_OPTION="Create Obsidian Project"
-INSTALL_DEPENDENCIES_OPTION="Install Dependencies"
 COPY_BRANCH_NAME_OPTION="Copy branch name to clipboard"
-ALL_OPTIONS=("$UI_WORKTREE_OPTION" "$BACKEND_WORKTREE_OPTION" "$OBSIDIAN_PROJECT_OPTION" "$INSTALL_DEPENDENCIES_OPTION" "$COPY_BRANCH_NAME_OPTION")
-DEFAULT_OPTIONS=("$OBSIDIAN_PROJECT_OPTION" "$INSTALL_DEPENDENCIES_OPTION" "$COPY_BRANCH_NAME_OPTION")
+ALL_OPTIONS=("$BACKEND_WORKTREE_OPTION" "$OBSIDIAN_PROJECT_OPTION" "$COPY_BRANCH_NAME_OPTION")
+DEFAULT_OPTIONS=("$OBSIDIAN_PROJECT_OPTION" "$COPY_BRANCH_NAME_OPTION")
 
 # Set default values
 name=""
@@ -75,7 +84,7 @@ check_exit_code $?
 branch_name="${input:-$branch_name}"
 
 # Prompt user for options
-printf 'Use default options (Obsidian, Install Dependencies, Copy branch name)? [Y/n]: '
+printf 'Use default options (Create Obsidian Project, Copy branch name to clipboard)? [Y/n]: '
 read -r use_defaults
 check_exit_code $?
 case "${use_defaults:-y}" in
@@ -89,23 +98,15 @@ case "${use_defaults:-y}" in
         ;;
 esac
 
-ui=false
 backend=false
 obsidian=false
-install_dependencies=false
 copy_branch=false
 
-if grep -qF "$UI_WORKTREE_OPTION" <<<"$selections"; then
-    ui=true
-fi
 if grep -qF "$BACKEND_WORKTREE_OPTION" <<<"$selections"; then
     backend=true
 fi
 if grep -qF "$OBSIDIAN_PROJECT_OPTION" <<<"$selections"; then
     obsidian=true
-fi
-if grep -qF "$INSTALL_DEPENDENCIES_OPTION" <<<"$selections"; then
-    install_dependencies=true
 fi
 if grep -qF "$COPY_BRANCH_NAME_OPTION" <<<"$selections"; then
     copy_branch=true
@@ -122,14 +123,9 @@ if [ -z "$branch_name" ]; then
     exit 1
 fi
 
-# Create worktree for UI
-if [ "$ui" = true ]; then
-    create_worktree_for_id "ironstream-hub-ui" "$branch_name" "$install_dependencies"
-fi
-
 # Create worktree for the Backend
 if [ "$backend" = true ]; then
-    create_worktree_for_id "ironstream-hub-backend" "$branch_name" "$install_dependencies"
+    create_worktree_for_id "ironstream-hub-backend" "$branch_name"
 fi
 
 if [ "$obsidian" = true ]; then
