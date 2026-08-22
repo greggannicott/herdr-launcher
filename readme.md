@@ -29,3 +29,13 @@ Command **sources** (`commands/*.sh`) emit NDJSON, one command object per line:
 ### Workspace switching
 
 `commands/herdr-workspaces.sh` lists herdr workspaces (excluding the focused one) and `handlers/herdr-workspace-switch.sh` runs `herdr workspace focus <workspace_id>`.
+
+### Script-backed commands
+
+The `run-script` type executes an external script. A command source just points at the script:
+
+```json
+{"type":"run-script","label":"Create Story or Bug","payload":{"script":"~/bin/create-story-or-bug.zsh"}}
+```
+
+A leading `~` is expanded to `$HOME`. The script must exist and be executable (its own shebang picks the interpreter), and the popup stays open until it finishes.
