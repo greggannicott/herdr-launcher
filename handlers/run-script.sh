@@ -13,11 +13,9 @@ if [[ -z "$script" ]]; then
   exit 1
 fi
 
-args=()
+has_args=false
 if [[ "$(jq -r '.payload.args // empty' <<<"$json")" != "" ]]; then
-  while IFS= read -r arg; do
-    args+=("$arg")
-  done < <(jq -r '.payload.args[]' <<<"$json")
+  has_args=true
 fi
 
 if [[ "$script" == "~"* ]]; then
@@ -34,4 +32,12 @@ if [[ ! -x "$script" ]]; then
   exit 1
 fi
 
-"$script" "${args[@]}"
+if [[ "$has_args" == true ]]; then
+  args=()
+  while IFS= read -r arg; do
+    args+=("$arg")
+  done < <(jq -r '.payload.args[]' <<<"$json")
+  "$script" "${args[@]}"
+else
+  "$script"
+fi
