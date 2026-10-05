@@ -49,6 +49,7 @@ if [[ ${#entries[@]} -eq 0 ]]; then
 fi
 
 selection="$(printf '%s\n' "${entries[@]}" |
+  LC_ALL=C sort -t $'\t' -k1,1 -k2,2 |
   fzf --prompt="command > " --layout=reverse --delimiter=$'\t' --with-nth 1,2 --no-sort || true)"
 
 if [[ -z "$selection" ]]; then
