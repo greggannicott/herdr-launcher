@@ -49,7 +49,7 @@ if [[ ${#entries[@]} -eq 0 ]]; then
 fi
 
 selection="$(printf '%s\n' "${entries[@]}" |
-  fzf --prompt="command > " --delimiter=$'\t' --with-nth 1,2 --no-sort || true)"
+  fzf --prompt="command > " --layout=reverse --delimiter=$'\t' --with-nth 1,2 --no-sort || true)"
 
 if [[ -z "$selection" ]]; then
   exit 0
