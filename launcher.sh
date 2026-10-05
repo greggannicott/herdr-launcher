@@ -12,11 +12,21 @@ fi
 commands_dir="$plugin_root/commands"
 handlers_dir="$plugin_root/handlers"
 
-entries=()
+groups=()
+commands=()
+payloads=()
+max_group_width=0
 while IFS= read -r json; do
   label="$(jq -r '.label // empty' <<<"$json" 2>/dev/null || true)"
   if [[ -n "$label" ]]; then
-    entries+=("$label"$'\t'"$json")
+    group="${label%% - *}"
+    command="${label#* - }"
+    groups+=("$group")
+    commands+=("$command")
+    payloads+=("$json")
+    if (( ${#group} > max_group_width )); then
+      max_group_width=${#group}
+    fi
   fi
 done < <(
   for source in "$commands_dir"/*.sh; do
@@ -26,6 +36,12 @@ done < <(
   done 2>/dev/null
 )
 
+entries=()
+for i in "${!groups[@]}"; do
+  printf -v group_column "%-*s" "$max_group_width" "${groups[$i]}"
+  entries+=("$group_column"$'\t'"${commands[$i]}"$'\t'"${payloads[$i]}")
+done
+
 if [[ ${#entries[@]} -eq 0 ]]; then
   printf 'No commands available (is herdr running?)\n'
   read -r -n 1 -s -p "Press any key to close"
@@ -33,13 +49,13 @@ if [[ ${#entries[@]} -eq 0 ]]; then
 fi
 
 selection="$(printf '%s\n' "${entries[@]}" |
-  fzf --prompt="command > " --delimiter=$'\t' --with-nth 1 --no-sort || true)"
+  fzf --prompt="command > " --delimiter=$'\t' --with-nth 1,2 --no-sort || true)"
 
 if [[ -z "$selection" ]]; then
   exit 0
 fi
 
-json="${selection#*$'\t'}"
+IFS=$'\t' read -r _ _ json <<<"$selection"
 
 type="$(jq -r '.type // empty' <<<"$json")"
 handler="$handlers_dir/$type.sh"

@@ -14,7 +14,7 @@ printf '%s' "$list" | jq -r --arg q "'" '
     | select(.focused == false)
     | {
         type: "herdr-workspace-switch",
-        label: ("Switch to " + $q + .label + $q),
+        label: ("Open Session - Switch to " + $q + .label + $q),
         payload: { workspace_id: .workspace_id }
       }
     | @json

@@ -2,4 +2,4 @@
 set -euo pipefail
 
 printf '%s\n' \
-  '{"type":"run-script","label":"Add Music To Buy","payload":{"script":"~/bin/add-music-to-buy.zsh"}}'
+  '{"type":"run-script","label":"Music - Add Music To Buy","payload":{"script":"~/bin/add-music-to-buy.zsh"}}'
