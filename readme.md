@@ -39,3 +39,25 @@ The `run-script` type executes an external script. A command source just points 
 ```
 
 A leading `~` is expanded to `$HOME`. The script must exist and be executable (its own shebang picks the interpreter), and the popup stays open until it finishes.
+
+### Copilot reports
+
+The `copilot-report` type runs Copilot non-interactively in the directory where
+the launcher was opened. It requires `copilot` on `PATH`, shows the selected
+command, directory, and prompt before starting, displays its output as it runs,
+and keeps the popup open until a key is pressed. Failures display
+an error and also wait for a key through the launcher's error handling.
+
+`Review branch against origin/iisMultiSource` runs:
+
+```sh
+copilot --agent code-reviewer --allow-tool 'shell(git:*)' --allow-tool 'write' -p "Review branch compared to origin/iisMultiSource"
+```
+
+Additional report commands can reuse the same handler by supplying a nonempty
+`prompt` and an optional array of Copilot arguments (each argument is passed
+literally, without shell expansion):
+
+```json
+{"type":"copilot-report","label":"Review current changes","payload":{"prompt":"Review uncommitted changes","args":["--agent","code-reviewer","--allow-tool","shell(git:*)","--allow-tool","write"]}}
+```
