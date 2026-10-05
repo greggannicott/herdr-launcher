@@ -39,7 +39,7 @@ done < <(
 entries=()
 for i in "${!groups[@]}"; do
   printf -v group_column "%-*s" "$max_group_width" "${groups[$i]}"
-  entries+=("$group_column"$'\t'"${commands[$i]}"$'\t'"${payloads[$i]}")
+  entries+=($'\e[2m'"$group_column"$'\e[0m'$'\t'"${commands[$i]}"$'\t'"${payloads[$i]}")
 done
 
 if [[ ${#entries[@]} -eq 0 ]]; then
@@ -50,7 +50,7 @@ fi
 
 selection="$(printf '%s\n' "${entries[@]}" |
   LC_ALL=C sort -t $'\t' -k1,1 -k2,2 |
-  fzf --prompt="command > " --layout=reverse --delimiter=$'\t' --with-nth 1,2 --no-sort || true)"
+  fzf --prompt="command > " --layout=reverse --ansi --delimiter=$'\t' --with-nth 1,2 --no-sort || true)"
 
 if [[ -z "$selection" ]]; then
   exit 0
