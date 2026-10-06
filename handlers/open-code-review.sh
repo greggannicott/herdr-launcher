@@ -96,6 +96,7 @@ done < <(find "$worktree_root" -maxdepth 1 -type f -name '*.out' -print0)
 
 if [[ ${#reviews[@]} -eq 0 ]]; then
   printf 'No code review files (*.out) found in %s\n' "$worktree_root"
+  read -r -n 1 -s -p "Press any key to close"
   exit 0
 fi
 

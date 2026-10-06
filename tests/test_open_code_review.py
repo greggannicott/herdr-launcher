@@ -1,10 +1,13 @@
 import json
 import os
 from pathlib import Path
+import pty
 import re
+import select
 import shlex
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -162,10 +165,27 @@ elif sys.argv[1:3] == ["pane", "current"]:
         self.earlier_today.unlink()
         self.accepted_review.unlink()
         self.legacy_review.unlink()
-        result = self.run_handler()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("No code review files", result.stdout)
+        master, slave = pty.openpty()
+        process = subprocess.Popen(
+            ["bash", str(ROOT / "handlers/open-code-review.sh"),
+             json.dumps({"type": "open-code-review"})],
+            env=self.env, stdin=slave, stdout=slave, stderr=slave)
+        os.close(slave)
+        self.addCleanup(os.close, master)
+        self.addCleanup(lambda: process.kill() if process.poll() is None else None)
+        output = b""
+        deadline = time.monotonic() + 5
+        while b"Press any key to close" not in output:
+            remaining = deadline - time.monotonic()
+            self.assertGreater(remaining, 0, output.decode())
+            ready, _, _ = select.select([master], [], [], remaining)
+            self.assertTrue(ready, output.decode())
+            output += os.read(master, 65536)
+        self.assertIn(b"No code review files", output)
+        self.assertIsNone(process.poll())
         self.assertFalse(self.log.exists())
+        os.write(master, b"x")
+        self.assertEqual(process.wait(timeout=5), 0)
 
     def test_missing_workspace_variable_uses_calling_pane_context(self):
         self.env.pop("HERDR_WORKSPACE_ID")
