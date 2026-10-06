@@ -59,11 +59,17 @@ copilot --agent code-reviewer --allow-tool 'shell(git:*)' --allow-tool 'write' -
 ```
 
 `Review Staged Changes` uses the same Copilot reviewer to review the staged changes.
+The staged review saves as type `staged`; the branch review against
+`origin/iisMultiSource` saves as type `iisMultiSource`. Review commands save
+their complete report in the worktree root using a filename that identifies
+the review type, timestamp, and outcome—for example,
+`code-review-staged-2026-10-06-17-03.reject.out`.
 
 `Open Code Review for this Worktree` lists `*.out` files in the worktree root.
-Files must be named `code-review-{yyyy-mm-dd}-{hh-mm}.{status}.out`. The picker
-shows Date, Time, and Status columns with an inline header. Selecting a review
-creates and focuses a Herdr tab in that worktree and opens the file in `nvim`.
+Files use the format `code-review-{type}-{yyyy-mm-dd}-{hh-mm}.{status}.out`.
+Older files without a type remain listed as `legacy`. The picker shows Type,
+Date, Time, and Status columns with an inline header. Selecting a review creates
+and focuses a Herdr tab in that worktree and opens the file in `nvim`.
 
 Additional report commands can reuse the same handler by supplying a nonempty
 `prompt` and an optional array of Copilot arguments (each argument is passed

@@ -49,22 +49,31 @@ reviews=()
 review_timestamps=()
 while IFS= read -r -d '' review; do
   filename="$(basename "$review")"
-  if [[ ! "$filename" =~ ^code-review-([0-9]{4}-[0-9]{2}-[0-9]{2})-([0-9]{2})-([0-9]{2})\.([^.]+)\.out$ ]]; then
+  if [[ "$filename" =~ ^code-review-([A-Za-z0-9_-]+)-([0-9]{4}-[0-9]{2}-[0-9]{2})-([0-9]{2})-([0-9]{2})\.([^.]+)\.out$ ]]; then
+    review_type="${BASH_REMATCH[1]}"
+    date="${BASH_REMATCH[2]}"
+    hour="${BASH_REMATCH[3]}"
+    minute="${BASH_REMATCH[4]}"
+    status="${BASH_REMATCH[5]}"
+  elif [[ "$filename" =~ ^code-review-([0-9]{4}-[0-9]{2}-[0-9]{2})-([0-9]{2})-([0-9]{2})\.([^.]+)\.out$ ]]; then
+    review_type="legacy"
+    date="${BASH_REMATCH[1]}"
+    hour="${BASH_REMATCH[2]}"
+    minute="${BASH_REMATCH[3]}"
+    status="${BASH_REMATCH[4]}"
+  else
     printf 'Error: code review filename does not match the expected format: %s\n' "$filename" >&2
     exit 1
   fi
-  date="${BASH_REMATCH[1]}"
-  hour="${BASH_REMATCH[2]}"
-  minute="${BASH_REMATCH[3]}"
   time="$hour:$minute"
   timestamp="${date//-/}${hour}${minute}"
-  status="${BASH_REMATCH[4]}"
   case "$status" in
     accept|accepted|approve|approved) status_color="$HERDR_FZF_MARKER" ;;
     reject|rejected) status_color="$HERDR_FZF_POINTER" ;;
     *) status_color="$HERDR_FZF_FG" ;;
   esac
-  printf -v row '%s%-10s%s  %s%-5s%s  %s%s%s' \
+  printf -v row '%s%-14s%s  %s%-10s%s  %s%-5s%s  %s%s%s' \
+    "$HERDR_FZF_FG" "$review_type" "$HERDR_FZF_RESET" \
     "$HERDR_FZF_INFO" "$date" "$HERDR_FZF_RESET" \
     "$HERDR_FZF_HEADER" "$time" "$HERDR_FZF_RESET" \
     "$status_color" "$status" "$HERDR_FZF_RESET"
@@ -90,7 +99,8 @@ if [[ ${#reviews[@]} -eq 0 ]]; then
   exit 0
 fi
 
-printf -v header '%s%-10s%s  %s%-5s%s  %s%s%s' \
+printf -v header '%s%-14s%s  %s%-10s%s  %s%-5s%s  %s%s%s' \
+  "$HERDR_FZF_HEADER" "Type" "$HERDR_FZF_RESET" \
   "$HERDR_FZF_INFO" "Date" "$HERDR_FZF_RESET" \
   "$HERDR_FZF_HEADER" "Time" "$HERDR_FZF_RESET" \
   "$HERDR_FZF_HEADER" "Status" "$HERDR_FZF_RESET"

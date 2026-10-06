@@ -22,6 +22,7 @@ class CopilotReportTests(unittest.TestCase):
         self.bin.mkdir()
         self.cwd = self.root / "repository with spaces"
         self.cwd.mkdir()
+        subprocess.run(["git", "init", "-q", str(self.cwd)], check=True)
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         LAUNCH_DIR=str(self.cwd))
         self.script("copilot", """#!/usr/bin/env python3
@@ -31,6 +32,13 @@ import sys
 print(json.dumps({"args": sys.argv[1:], "cwd": os.getcwd()}), flush=True)
 print("Review report", flush=True)
 sys.exit(int(os.environ.get("COPILOT_STATUS", "0")))
+""")
+        self.script("date", """#!/usr/bin/env bash
+case "$1" in
+  +%F) echo 2026-10-06 ;;
+  +%H-%M) echo 17-03 ;;
+  *) exit 1 ;;
+esac
 """)
         self.command = json.loads(subprocess.check_output(
             ["bash", str(ROOT / "commands/review-branch.sh")], text=True))
@@ -79,7 +87,11 @@ sys.exit(int(os.environ.get("COPILOT_STATUS", "0")))
         self.assertEqual(invocation, {
             "args": ["--agent", "code-reviewer", "--allow-tool", "shell(git:*)",
                      "--allow-tool", "write", "-p",
-                     "Review branch compared to origin/iisMultiSource"],
+                     "Review branch compared to origin/iisMultiSource\n\n"
+                     "Save the complete review report at "
+                     f"{self.cwd}/code-review-iisMultiSource-2026-10-06-17-03.{{status}}.out. "
+                     "Replace {status} with reject if there are actionable findings, or accept "
+                     "if there are none. Keep the type, date, and time in the filename unchanged."],
             "cwd": str(self.cwd),
         })
         self.assertIn("Review report", output)
@@ -95,6 +107,7 @@ sys.exit(int(os.environ.get("COPILOT_STATUS", "0")))
             "label": "Code Review - Review Staged Changes",
             "payload": {
                 "prompt": "Review only the staged changes",
+                "review_type": "staged",
                 "args": ["--agent", "code-reviewer", "--allow-tool", "shell(git:*)",
                          "--allow-tool", "write"],
             },
