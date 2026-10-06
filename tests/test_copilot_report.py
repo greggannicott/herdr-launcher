@@ -87,6 +87,19 @@ sys.exit(int(os.environ.get("COPILOT_STATUS", "0")))
         os.write(master, b"x")
         self.assertEqual(process.wait(timeout=5), 0)
 
+    def test_review_staged_changes_command(self):
+        command = json.loads(subprocess.check_output(
+            ["bash", str(ROOT / "commands/review-staged-changes.sh")], text=True))
+        self.assertEqual(command, {
+            "type": "copilot-report",
+            "label": "Code Review - Review Staged Changes",
+            "payload": {
+                "prompt": "Review only the staged changes",
+                "args": ["--agent", "code-reviewer", "--allow-tool", "shell(git:*)",
+                         "--allow-tool", "write"],
+            },
+        })
+
     def test_prompt_only_and_literal_arguments(self):
         for args in (None, [], ["value with spaces", "line one\nline two", "$(false)"]):
             with self.subTest(args=args):

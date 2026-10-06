@@ -55,6 +55,8 @@ an error and also wait for a key through the launcher's error handling.
 copilot --agent code-reviewer --allow-tool 'shell(git:*)' --allow-tool 'write' -p "Review branch compared to origin/iisMultiSource"
 ```
 
+`Review Staged Changes` uses the same Copilot reviewer to review the staged changes.
+
 Additional report commands can reuse the same handler by supplying a nonempty
 `prompt` and an optional array of Copilot arguments (each argument is passed
 literally, without shell expansion):
