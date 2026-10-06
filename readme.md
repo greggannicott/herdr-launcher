@@ -16,6 +16,9 @@ Requires herdr >= 0.7.5 and `jq`.
 
 Trigger the `dev.herdr-launcher.open-launcher` action (from herdr's action menu, or a bound key) to open the launcher popup. Type to filter, Enter to run, Escape to cancel. The popup closes when the selected command finishes.
 The fzf picker uses a One Dark-inspired color palette.
+All launcher pickers use the shared `herdr_fzf` helper in `lib/fzf.sh` for
+consistent layout and colors; selector-specific fzf options are passed through
+to that helper.
 
 ## How it works
 
@@ -56,6 +59,10 @@ copilot --agent code-reviewer --allow-tool 'shell(git:*)' --allow-tool 'write' -
 ```
 
 `Review Staged Changes` uses the same Copilot reviewer to review the staged changes.
+
+`Open Code Review for this Worktree` lists `*.out` files in the worktree root.
+Selecting one creates and focuses a Herdr tab in that worktree and opens the
+file in `nvim`.
 
 Additional report commands can reuse the same handler by supplying a nonempty
 `prompt` and an optional array of Copilot arguments (each argument is passed

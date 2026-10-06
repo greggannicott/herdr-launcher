@@ -163,8 +163,10 @@ print("Review report", flush=True)
         plugin = self.root / "plugin"
         (plugin / "commands").mkdir(parents=True)
         (plugin / "handlers").mkdir()
+        (plugin / "lib").mkdir()
         shutil.copy2(ROOT / "commands/review-branch.sh", plugin / "commands")
         shutil.copy2(ROOT / "handlers/copilot-report.sh", plugin / "handlers")
+        shutil.copy2(ROOT / "lib/fzf.sh", plugin / "lib")
         self.script("fzf", "#!/usr/bin/env bash\nhead -n 1\n")
         self.env["HERDR_PLUGIN_ROOT"] = str(plugin)
         for status in (0, 7):
