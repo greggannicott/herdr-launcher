@@ -46,8 +46,43 @@ if ! worktree_root="$(git -C "$launch_dir" rev-parse --show-toplevel 2>/dev/null
 fi
 
 reviews=()
+review_timestamps=()
 while IFS= read -r -d '' review; do
-  reviews+=("$(basename "$review")"$'\t'"$review")
+  filename="$(basename "$review")"
+  if [[ ! "$filename" =~ ^code-review-([0-9]{4}-[0-9]{2}-[0-9]{2})-([0-9]{2})-([0-9]{2})\.([^.]+)\.out$ ]]; then
+    printf 'Error: code review filename does not match the expected format: %s\n' "$filename" >&2
+    exit 1
+  fi
+  date="${BASH_REMATCH[1]}"
+  hour="${BASH_REMATCH[2]}"
+  minute="${BASH_REMATCH[3]}"
+  time="$hour:$minute"
+  timestamp="${date//-/}${hour}${minute}"
+  status="${BASH_REMATCH[4]}"
+  case "$status" in
+    accept|accepted|approve|approved) status_color="$HERDR_FZF_MARKER" ;;
+    reject|rejected) status_color="$HERDR_FZF_POINTER" ;;
+    *) status_color="$HERDR_FZF_FG" ;;
+  esac
+  printf -v row '%s%-10s%s  %s%-5s%s  %s%s%s' \
+    "$HERDR_FZF_INFO" "$date" "$HERDR_FZF_RESET" \
+    "$HERDR_FZF_HEADER" "$time" "$HERDR_FZF_RESET" \
+    "$status_color" "$status" "$HERDR_FZF_RESET"
+  insert_at=0
+  while (( insert_at < ${#review_timestamps[@]} )) &&
+    [[ ! "$timestamp" > "${review_timestamps[$insert_at]}" ]]; do
+    ((insert_at += 1))
+  done
+  review_timestamps=(
+    "${review_timestamps[@]:0:insert_at}"
+    "$timestamp"
+    "${review_timestamps[@]:insert_at}"
+  )
+  reviews=(
+    "${reviews[@]:0:insert_at}"
+    "$row"$'\t'"$review"
+    "${reviews[@]:insert_at}"
+  )
 done < <(find "$worktree_root" -maxdepth 1 -type f -name '*.out' -print0)
 
 if [[ ${#reviews[@]} -eq 0 ]]; then
@@ -55,15 +90,21 @@ if [[ ${#reviews[@]} -eq 0 ]]; then
   exit 0
 fi
 
+printf -v header '%s%-10s%s  %s%-5s%s  %s%s%s' \
+  "$HERDR_FZF_INFO" "Date" "$HERDR_FZF_RESET" \
+  "$HERDR_FZF_HEADER" "Time" "$HERDR_FZF_RESET" \
+  "$HERDR_FZF_HEADER" "Status" "$HERDR_FZF_RESET"
+
 printf -v selected ''
 if ! IFS= read -r -d '' selected < <(
-  printf '%s\0' "${reviews[@]}" |
-    herdr_fzf "Code review> " --read0 --print0 --delimiter=$'\t' --with-nth=1
+  printf '%s\0' "$header" "${reviews[@]}" |
+    herdr_fzf "Code review> " --read0 --print0 --delimiter=$'\t' \
+      --with-nth=1 --header-lines=1 --header-lines-border=inline --style=full
 ); then
   exit 0
 fi
 
-selected="${selected#*$'\t'}"
+IFS=$'\t' read -r _ selected <<<"$selected"
 if [[ ! -f "$selected" ]]; then
   printf 'Error: selected code review no longer exists: %s\n' "$selected" >&2
   exit 1

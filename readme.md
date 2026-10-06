@@ -10,7 +10,7 @@ Link the local plugin:
 herdr plugin link /path/to/herdr-launcher
 ```
 
-Requires herdr >= 0.7.5 and `jq`.
+Requires herdr >= 0.7.5, `jq`, and fzf >= 0.72.
 
 ## Usage
 
@@ -61,8 +61,9 @@ copilot --agent code-reviewer --allow-tool 'shell(git:*)' --allow-tool 'write' -
 `Review Staged Changes` uses the same Copilot reviewer to review the staged changes.
 
 `Open Code Review for this Worktree` lists `*.out` files in the worktree root.
-Selecting one creates and focuses a Herdr tab in that worktree and opens the
-file in `nvim`.
+Files must be named `code-review-{yyyy-mm-dd}-{hh-mm}.{status}.out`. The picker
+shows Date, Time, and Status columns with an inline header. Selecting a review
+creates and focuses a Herdr tab in that worktree and opens the file in `nvim`.
 
 Additional report commands can reuse the same handler by supplying a nonempty
 `prompt` and an optional array of Copilot arguments (each argument is passed

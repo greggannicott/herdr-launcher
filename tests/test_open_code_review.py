@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import tempfile
@@ -20,10 +21,15 @@ class OpenCodeReviewTests(unittest.TestCase):
         self.worktree = self.root / "worktree with spaces"
         self.worktree.mkdir()
         subprocess.run(["git", "init", "-q", str(self.worktree)], check=True)
-        self.review = self.worktree / "review report.out"
+        self.review = self.worktree / "code-review-2026-10-06-15-51.reject.out"
         self.review.write_text("Review findings")
+        self.earlier_today = self.worktree / "code-review-2026-10-06-15-22.reject.out"
+        self.earlier_today.write_text("Earlier review")
+        self.accepted_review = self.worktree / "code-review-2026-10-05-15-39.accept.out"
+        self.accepted_review.write_text("Accepted")
         self.log = self.root / "herdr.jsonl"
         self.fzf_args = self.root / "fzf-args.json"
+        self.fzf_items = self.root / "fzf-items.bin"
 
         self.script("fzf", """#!/usr/bin/env python3
 import json
@@ -35,6 +41,8 @@ items = sys.stdin.buffer.read().split(b"\\0")
 selected = os.environ.get("FAKE_FZF_SELECT", "").encode()
 for item in items:
     if item.endswith(b"\\t" + selected):
+        with open(os.environ["FZF_ITEMS"], "wb") as output:
+            output.write(b"\\0".join(items))
         sys.stdout.buffer.write(item + b"\\0")
         break
 """)
@@ -58,6 +66,7 @@ elif sys.argv[1:3] == ["pane", "current"]:
             HERDR_BIN_PATH=str(self.bin / "herdr"),
             HERDR_LOG=str(self.log),
             FZF_ARGS=str(self.fzf_args),
+            FZF_ITEMS=str(self.fzf_items),
             FAKE_FZF_SELECT=str(self.review.resolve()),
         )
 
@@ -89,18 +98,61 @@ elif sys.argv[1:3] == ["pane", "current"]:
         self.assertIn("--read0", fzf_args)
         self.assertIn("--print0", fzf_args)
         self.assertIn("--with-nth=1", fzf_args)
+        self.assertIn("--header-lines=1", fzf_args)
+        self.assertIn("--header-lines-border=inline", fzf_args)
+        self.assertIn("--style=full", fzf_args)
+        rows = self.fzf_items.read_bytes().split(b"\0")
+        visible_rows = {
+            row.split(b"\t")[1]: re.sub(rb"\x1b\[[0-9;]*m", b"", row.split(b"\t")[0])
+            for row in rows[1:] if row
+        }
+        ordered_rows = [
+            re.sub(rb"\x1b\[[0-9;]*m", b"", row.split(b"\t")[0])
+            for row in rows[1:] if row
+        ]
+        self.assertEqual(ordered_rows, [
+            b"2026-10-06  15:51  reject",
+            b"2026-10-06  15:22  reject",
+            b"2026-10-05  15:39  accept",
+        ])
+        visible_header = re.sub(rb"\x1b\[[0-9;]*m", b"", rows[0].split(b"\t")[0])
+        self.assertEqual(
+            visible_header, b"Date" + b" " * 8 + b"Time" + b" " * 3 + b"Status")
+        self.assertEqual(visible_header.index(b"Time"), 12)
+        self.assertEqual(visible_header.index(b"Status"), 19)
+        self.assertEqual(
+            visible_rows[str(self.review.resolve()).encode()],
+            b"2026-10-06  15:51  reject")
+        self.assertEqual(
+            visible_rows[str(self.accepted_review.resolve()).encode()],
+            b"2026-10-05  15:39  accept")
+        reject_row = next(row for row in rows
+                          if row.endswith(b"\t" + str(self.review.resolve()).encode()))
+        accept_row = next(row for row in rows
+                          if row.endswith(b"\t" + str(self.accepted_review.resolve()).encode()))
+        self.assertIn(b"\x1b[38;2;224;108;117mreject", reject_row)
+        self.assertIn(b"\x1b[38;2;152;195;121maccept", accept_row)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual(calls[0], [
             "tab", "create", "--workspace", "w1", "--cwd", str(self.worktree.resolve()),
-            "--label", "Code Review - review report.out", "--focus",
+            "--label", "Code Review - code-review-2026-10-06-15-51.reject.out", "--focus",
         ])
         self.assertEqual(calls[1][:3], ["pane", "run", "w1:p2"])
         self.assertEqual(
             shlex.split(calls[1][3]),
             ["exec", "nvim", "--", str(self.review.resolve())])
 
+    def test_invalid_review_filename_is_an_error(self):
+        (self.worktree / "other-review.out").write_text("Review")
+        result = self.run_handler()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match the expected format: other-review.out", result.stderr)
+        self.assertFalse(self.log.exists())
+
     def test_no_reviews_does_not_create_tab(self):
         self.review.unlink()
+        self.earlier_today.unlink()
+        self.accepted_review.unlink()
         result = self.run_handler()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("No code review files", result.stdout)
