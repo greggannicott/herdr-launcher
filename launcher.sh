@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+one_dark_theme="fg:#abb2bf,bg:#282c34,hl:#61afef,fg+:#abb2bf,bg+:#3e4451,hl+:#61afef,info:#56b6c2,prompt:#61afef,pointer:#e06c75,marker:#98c379,spinner:#c678dd,header:#e5c07b,border:#4b5263,label:#abb2bf,query:#abb2bf,scrollbar:#4b5263,gutter:#282c34"
+
 plugin_root="${HERDR_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -50,7 +52,8 @@ fi
 
 selection="$(printf '%s\n' "${entries[@]}" |
   LC_ALL=C sort -t $'\t' -k1,1 -k2,2 |
-  fzf --prompt="> " --layout=reverse --ansi --delimiter=$'\t' --with-nth 1,2 --no-sort || true)"
+  fzf --prompt="> " --layout=reverse --ansi --delimiter=$'\t' --with-nth 1,2 --no-sort \
+    --color="$one_dark_theme" || true)"
 
 if [[ -z "$selection" ]]; then
   exit 0

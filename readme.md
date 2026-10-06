@@ -15,6 +15,7 @@ Requires herdr >= 0.7.5 and `jq`.
 ## Usage
 
 Trigger the `dev.herdr-launcher.open-launcher` action (from herdr's action menu, or a bound key) to open the launcher popup. Type to filter, Enter to run, Escape to cancel. The popup closes when the selected command finishes.
+The fzf picker uses a One Dark-inspired color palette.
 
 ## How it works
 
