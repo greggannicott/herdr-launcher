@@ -25,10 +25,14 @@ to that helper.
 Command **sources** (`commands/*.sh`) emit NDJSON, one command object per line:
 
 ```json
-{"type":"herdr-workspace-switch","label":"Switch to dotfiles","payload":{"workspace_id":"w1"}}
+{"type":"herdr-workspace-switch","label":"Open Session - Switch to dotfiles","payload":{"workspace_id":"w1"}}
 ```
 
-`launcher.sh` gathers every source's output, shows the labels in fzf, and on selection dispatches to `handlers/<type>.sh`, passing the JSON as the first argument. Adding a command type is two files: a source emitting the NDJSON above and a handler that consumes the JSON.
+A label is `"<group> - <command>"`. The launcher splits it on the first `" - "` and shows the two parts as aligned columns, the group dimmed and the command in normal text, with the input at the top of the list. Only the first separator splits, so a command may contain `" - "` itself. A label with no separator is shown twice, once per column, so every source should include one.
+
+Entries are sorted case-insensitively by group, then command.
+
+`launcher.sh` gathers every source's output and, on selection, dispatches to `handlers/<type>.sh`, passing the JSON as the first argument. Adding a command type is two files: a source emitting the NDJSON above and a handler that consumes the JSON.
 
 ### Workspace switching
 
