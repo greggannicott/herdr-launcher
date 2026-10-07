@@ -48,7 +48,7 @@ The `run-script` type executes an external script. A command source just points 
 
 A leading `~` is expanded to `$HOME`. The script must exist and be executable (its own shebang picks the interpreter), and the popup stays open until it finishes.
 
-### Building Hub RPMs
+### Jenkins Hub builds
 
 `Build - Generate Linux Build via Jenkins` asks for the job's branch, version, test, RPM,
 installation, and UI-mode parameters, then shows a summary for confirmation
@@ -82,6 +82,20 @@ export JENKINS_API_TOKEN='your-api-token'
 If either credential is still missing or empty, the command names the missing
 variables and prints the file path, setup commands, and example exports.
 Save the credentials file and retry; no Herdr restart is needed.
+
+`Build - Generate Windows Build via Jenkins` runs the
+`Build_Hub_On_Windows_GitHUB` job. It prompts for Hub and UI branches, unit and
+integration tests, installer creation, license generator, diagnostic key
+generator, UI production mode, and FIPS mode. The Hub branch uses the same
+launch-directory default as the Linux command. The UI branch defaults to
+`main`; tests, installer, both generators, and production mode default to on,
+while FIPS mode defaults to off, matching the Windows job's defaults.
+There is no Windows version-number input.
+
+Both commands share the prompts, confirmation, credentials-file loading, CSRF
+handling, and build submission in `lib/jenkins-build.sh`. Job-specific parameter
+names and defaults live in their handlers. The Windows command uses the same
+credentials file and does not load interactive shell startup files.
 
 Use a Jenkins API token for an account with
 permission to build this job; the token is not stored in the plugin or passed

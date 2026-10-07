@@ -12,7 +12,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class BuildHubRpmsTests(unittest.TestCase):
+class JenkinsBuildTestCase(unittest.TestCase):
+    command_source = "build-hub-rpms"
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -39,9 +41,13 @@ with open(os.environ["JENKINS_TEST_REQUESTS"], "a") as log:
     log.write(json.dumps(request) + "\\n")
 if args[-1].endswith("/crumbIssuer/api/json"):
     print(json.dumps({"crumbRequestField": "Jenkins-Crumb", "crumb": "crumb-value"}))
-    print("200")
+    print(os.environ.get("JENKINS_TEST_CRUMB_STATUS", "200"))
 else:
-    print("201")
+    with open(args[args.index("-D") + 1], "w") as headers:
+        headers.write("Location: https://jenkins.example/queue/item/42/\\r\\n")
+    with open(args[args.index("-o") + 1], "w") as body:
+        body.write("Build response")
+    print(os.environ.get("JENKINS_TEST_BUILD_STATUS", "201"))
 """)
         self.env = dict(
             os.environ,
@@ -54,7 +60,7 @@ else:
             LAUNCH_DIR=str(self.root),
         )
         self.command = json.loads(subprocess.check_output(
-            ["bash", str(ROOT / "commands/build-hub-rpms.sh")], text=True))
+            ["bash", str(ROOT / f"commands/{self.command_source}.sh")], text=True))
 
     def script(self, name, content):
         path = self.bin / name
@@ -64,7 +70,7 @@ else:
     def launch(self, input_text):
         master, slave = pty.openpty()
         process = subprocess.Popen(
-            ["bash", str(ROOT / "handlers/build-hub-rpms.sh"),
+            ["bash", str(ROOT / f"handlers/{self.command_source}.sh"),
              json.dumps(self.command)],
             stdin=slave, stdout=slave, stderr=slave, env=self.env)
         os.close(slave)
@@ -84,6 +90,8 @@ else:
             output += os.read(master, 65536)
         return output.decode()
 
+
+class BuildHubRpmsTests(JenkinsBuildTestCase):
     def test_command_source(self):
         self.assertEqual(self.command, {
             "type": "build-hub-rpms",
@@ -251,6 +259,109 @@ else:
         self.until(master, b"Build cancelled.")
         self.assertEqual(process.wait(timeout=5), 0)
         self.assertFalse(self.requests.exists())
+
+
+class BuildHubWindowsTests(JenkinsBuildTestCase):
+    command_source = "build-hub-windows"
+
+    def test_command_source(self):
+        self.assertEqual(self.command, {
+            "type": "build-hub-windows",
+            "label": "Build - Generate Windows Build via Jenkins",
+        })
+        self.assertTrue(os.access(
+            ROOT / "handlers/build-hub-windows.sh", os.X_OK))
+
+    def test_defaults_and_launch_branch_are_posted_to_windows_job(self):
+        worktree = self.root / "windows-worktree"
+        subprocess.run(["git", "init", "--quiet", str(worktree)], check=True)
+        subprocess.run(
+            ["git", "-C", str(worktree), "symbolic-ref", "HEAD",
+             "refs/heads/feature/windows"], check=True)
+        self.env["LAUNCH_DIR"] = str(worktree)
+        process, master = self.launch("\n" * 9 + "y\n")
+        output = self.until(master, b"Queue:")
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertIn("Hub branch [feature/windows]", output)
+        self.assertIn("FIPS mode:              false", output)
+        self.assertIn("https://jenkins.example/queue/item/42/", output)
+        self.assertNotIn("Hub version number", output)
+        requests = [json.loads(line) for line in self.requests.read_text().splitlines()]
+        self.assertEqual(len(requests), 2)
+        post = requests[-1]
+        self.assertTrue(post["args"][-1].endswith(
+            "/job/Build_Hub_On_Windows_GitHUB/buildWithParameters"))
+        data = [post["args"][i + 1] for i, arg in enumerate(post["args"])
+                if arg == "--data-urlencode"]
+        self.assertEqual(data, [
+            "TargetBranch=feature/windows",
+            "UI_Repository_Branch=main",
+            "Run_Unit_tests=true",
+            "Run_Integration_tests=true",
+            "Build_the_installer=true",
+            "Build_License_Generator=true",
+            "Build_Diagnostic_Key_Generator=true",
+            "UI_Production_Mode=true",
+            "FIPS_Mode=false",
+        ])
+        self.assertIn("Jenkins-Crumb: crumb-value", post["args"])
+        self.assertNotIn("secret-token", " ".join(post["args"]))
+        self.assertNotIn("secret-token", output)
+
+    def test_explicit_options_and_no_crumb(self):
+        self.env["JENKINS_TEST_CRUMB_STATUS"] = "404"
+        process, master = self.launch(
+            "feature/other\nui/other\ninvalid\nn\nn\nn\nn\nn\nn\ny\ny\n")
+        self.until(master, b"Queue:")
+        self.assertEqual(process.wait(timeout=5), 0)
+        requests = [json.loads(line) for line in self.requests.read_text().splitlines()]
+        post = requests[-1]
+        self.assertNotIn("--header", post["args"])
+        data = [post["args"][i + 1] for i, arg in enumerate(post["args"])
+                if arg == "--data-urlencode"]
+        self.assertEqual(data, [
+            "TargetBranch=feature/other",
+            "UI_Repository_Branch=ui/other",
+            "Run_Unit_tests=false",
+            "Run_Integration_tests=false",
+            "Build_the_installer=false",
+            "Build_License_Generator=false",
+            "Build_Diagnostic_Key_Generator=false",
+            "UI_Production_Mode=false",
+            "FIPS_Mode=true",
+        ])
+
+    def test_cancel_skips_network(self):
+        process, master = self.launch("\n" * 9 + "n\n")
+        self.until(master, b"Build cancelled.")
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertFalse(self.requests.exists())
+
+    def test_missing_credentials_shows_shared_instructions(self):
+        self.env.pop("JENKINS_API_TOKEN")
+        result = subprocess.run(
+            ["bash", str(ROOT / "handlers/build-hub-windows.sh"),
+             json.dumps(self.command)],
+            env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("  JENKINS_API_TOKEN\n", result.stderr)
+        self.assertIn("chmod 600", result.stderr)
+        self.assertIn("jenkins.env", result.stderr)
+        self.assertFalse(self.requests.exists())
+
+    def test_rejected_build_is_reported(self):
+        self.env["JENKINS_TEST_BUILD_STATUS"] = "403"
+        process, master = self.launch("\n" * 9 + "y\n")
+        self.until(master, b"Jenkins rejected the build request (HTTP 403)")
+        self.assertNotEqual(process.wait(timeout=5), 0)
+
+    def test_failed_crumb_does_not_submit_build(self):
+        self.env["JENKINS_TEST_CRUMB_STATUS"] = "401"
+        process, master = self.launch("\n" * 9 + "y\n")
+        self.until(master, b"Jenkins CSRF crumb request failed with HTTP 401")
+        self.assertNotEqual(process.wait(timeout=5), 0)
+        requests = self.requests.read_text().splitlines()
+        self.assertEqual(len(requests), 1)
 
 
 if __name__ == "__main__":
