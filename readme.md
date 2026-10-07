@@ -97,6 +97,17 @@ handling, and build submission in `lib/jenkins-build.sh`. Job-specific parameter
 names and defaults live in their handlers. The Windows command uses the same
 credentials file and does not load interactive shell startup files.
 
+`Build - List Build Results` fetches the latest 25 builds from each job and
+combines them in a newest-first fzf table with Platform, Build, Date/Time (UTC),
+Started, Result, and Hub Branch columns. Started shows the time since the build started
+as `just now`, minutes, hours, or days ago, calculated when the list is fetched.
+In-progress builds display `RUNNING`.
+Select a row to open that build's Jenkins page in your default browser;
+Escape cancels. The command uses the same credentials file, requires account
+read access to both jobs, and reports API failures rather than showing a
+partial list. Browser opening uses `open` on macOS and `xdg-open` on Linux.
+Credential loading and authentication are shared in `lib/jenkins-credentials.sh`.
+
 Use a Jenkins API token for an account with
 permission to build this job; the token is not stored in the plugin or passed
 as a command-line argument. The handler requests a CSRF crumb when Jenkins
