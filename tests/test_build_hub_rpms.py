@@ -1,0 +1,257 @@
+import json
+import os
+from pathlib import Path
+import pty
+import select
+import subprocess
+import tempfile
+import time
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class BuildHubRpmsTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.requests = self.root / "requests.jsonl"
+        self.script("curl", """#!/usr/bin/env python3
+import json
+import os
+import sys
+
+args = sys.argv[1:]
+config = args[args.index("--config") + 1]
+with open(config) as source:
+    auth_config = source.read()
+request = {
+    "args": args,
+    "auth_config": auth_config,
+    "env_user": os.environ.get("JENKINS_USER"),
+    "env_token": os.environ.get("JENKINS_API_TOKEN"),
+}
+with open(os.environ["JENKINS_TEST_REQUESTS"], "a") as log:
+    log.write(json.dumps(request) + "\\n")
+if args[-1].endswith("/crumbIssuer/api/json"):
+    print(json.dumps({"crumbRequestField": "Jenkins-Crumb", "crumb": "crumb-value"}))
+    print("200")
+else:
+    print("201")
+""")
+        self.env = dict(
+            os.environ,
+            PATH=f"{self.bin}:{os.environ['PATH']}",
+            JENKINS_USER="jenkins-user",
+            JENKINS_API_TOKEN="secret-token",
+            JENKINS_TEST_REQUESTS=str(self.requests),
+            HOME=str(self.root),
+            XDG_CONFIG_HOME=str(self.root / "config"),
+            LAUNCH_DIR=str(self.root),
+        )
+        self.command = json.loads(subprocess.check_output(
+            ["bash", str(ROOT / "commands/build-hub-rpms.sh")], text=True))
+
+    def script(self, name, content):
+        path = self.bin / name
+        path.write_text(content)
+        path.chmod(0o755)
+
+    def launch(self, input_text):
+        master, slave = pty.openpty()
+        process = subprocess.Popen(
+            ["bash", str(ROOT / "handlers/build-hub-rpms.sh"),
+             json.dumps(self.command)],
+            stdin=slave, stdout=slave, stderr=slave, env=self.env)
+        os.close(slave)
+        self.addCleanup(os.close, master)
+        self.addCleanup(lambda: process.kill() if process.poll() is None else None)
+        os.write(master, input_text.encode())
+        return process, master
+
+    def until(self, master, marker):
+        output = b""
+        deadline = time.monotonic() + 5
+        while marker not in output:
+            remaining = deadline - time.monotonic()
+            self.assertGreater(remaining, 0, output.decode())
+            ready, _, _ = select.select([master], [], [], remaining)
+            self.assertTrue(ready, output.decode())
+            output += os.read(master, 65536)
+        return output.decode()
+
+    def test_command_source(self):
+        self.assertEqual(self.command, {
+            "type": "build-hub-rpms",
+            "label": "Build - Generate Linux Build via Jenkins",
+        })
+
+    def test_hub_branch_defaults_to_launch_directory_branch(self):
+        worktree = self.root / "worktree"
+        subprocess.run(
+            ["git", "init", "--quiet", str(worktree)], check=True)
+        subprocess.run(
+            ["git", "-C", str(worktree), "symbolic-ref",
+             "HEAD", "refs/heads/feature/launched-here"], check=True)
+        nested = worktree / "nested"
+        nested.mkdir()
+        self.env["LAUNCH_DIR"] = str(nested)
+        process, master = self.launch("\n\n\n\n\n\n\n\ny\n")
+        output = self.until(master, b"Jenkins accepted the build request")
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertIn("Hub branch [feature/launched-here]", output)
+        self.assertIn("Hub branch:             feature/launched-here", output)
+        self.assertIn("Build the RPMs [y/N]", output)
+        self.assertIn("Build RPMs:             false", output)
+        requests = [json.loads(line) for line in self.requests.read_text().splitlines()]
+        self.assertIn("IHub_TargetBranch=feature/launched-here",
+                      requests[-1]["args"])
+        self.assertIn("Build_the_RPMs=false", requests[-1]["args"])
+
+    def test_missing_launch_branch_warns_and_preserves_previous_default(self):
+        process, master = self.launch("\n\n\n\n\n\n\n\nn\n")
+        output = self.until(master, b"Build cancelled.")
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertIn("could not determine the current Git branch", output)
+        self.assertIn("Hub branch [iisMultiSource]", output)
+        self.assertFalse(self.requests.exists())
+
+    def test_prompts_confirms_and_posts_parameters_with_crumb(self):
+        process, master = self.launch(
+            "feature/test\nmain\n2.0.0-3\ny\nn\ny\ny\nn\ny\n")
+        output = self.until(master, b"Jenkins accepted the build request")
+        self.assertIn("Hub branch:             feature/test", output)
+        self.assertIn("Install on uk-r9-ib-003: true", output)
+        self.assertIn("Jenkins accepted the build request (HTTP 201)", output)
+        self.assertEqual(process.wait(timeout=5), 0)
+
+        requests = [json.loads(line) for line in self.requests.read_text().splitlines()]
+        self.assertEqual(len(requests), 2)
+        self.assertTrue(requests[0]["args"][-1].endswith(
+            "/crumbIssuer/api/json"))
+        post = requests[1]
+        self.assertTrue(post["args"][-1].endswith(
+            "/job/Build_Hub_RPMs_FromGitHub/buildWithParameters"))
+        self.assertIn("--header", post["args"])
+        self.assertEqual(post["args"][post["args"].index("--header") + 1],
+                         "Jenkins-Crumb: crumb-value")
+        data = [post["args"][i + 1] for i, arg in enumerate(post["args"])
+                if arg == "--data-urlencode"]
+        self.assertEqual(data, [
+            "IHub_TargetBranch=feature/test",
+            "HubUI_TargetBranch=main",
+            "Hub_Version_Number=2.0.0-3",
+            "Run_unit_tests=true",
+            "Run_integration_tests=false",
+            "Build_the_RPMs=true",
+            "Install_the_built_version=true",
+            "UI_Production_Mode=false",
+        ])
+        self.assertIn('user = "jenkins-user:secret-token"', post["auth_config"])
+        self.assertNotIn("secret-token", " ".join(post["args"]))
+        self.assertNotIn("secret-token", output)
+
+    def test_install_defaults_off_and_cancel_skips_network(self):
+        process, master = self.launch("\n\n\n\n\n\n\n\nn\n")
+        output = self.until(master, b"Build cancelled.")
+        self.assertIn("Install on uk-r9-ib-003: false", output)
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertFalse(self.requests.exists())
+
+    def test_missing_credentials_fails_before_prompting_or_network(self):
+        for missing in [
+            ("JENKINS_USER",),
+            ("JENKINS_API_TOKEN",),
+            ("JENKINS_USER", "JENKINS_API_TOKEN"),
+        ]:
+            for value in (None, ""):
+                with self.subTest(missing=missing, value=value):
+                    env = self.env.copy()
+                    for variable in missing:
+                        if value is None:
+                            env.pop(variable)
+                        else:
+                            env[variable] = value
+                    result = subprocess.run(
+                        ["bash", str(ROOT / "handlers/build-hub-rpms.sh"),
+                         json.dumps(self.command)],
+                        env=env, capture_output=True, text=True)
+                    self.assert_credentials_instructions(result, missing)
+
+    def assert_credentials_instructions(self, result, missing):
+        self.assertNotEqual(result.returncode, 0)
+        expected = "".join(f"  {variable}\n" for variable in missing)
+        self.assertIn(
+            f"Error: missing or empty Jenkins credentials:\n{expected}\n",
+            result.stderr)
+        path = Path(self.env["XDG_CONFIG_HOME"]) / "herdr-launcher/jenkins.env"
+        self.assertIn(str(path), result.stderr)
+        for instruction in (
+            "mkdir -p", "umask 077", "chmod 600",
+            "export JENKINS_USER='your-jenkins-user'",
+            "export JENKINS_API_TOKEN='your-api-token'",
+            "no Herdr restart is needed",
+        ):
+            self.assertIn(instruction, result.stderr)
+        self.assertNotIn("secret-token", result.stderr)
+        self.assertNotIn("Hub branch", result.stdout)
+        self.assertFalse(self.requests.exists())
+
+    def credentials_file(self, base):
+        directory = base / "herdr-launcher"
+        directory.mkdir(parents=True)
+        path = directory / "jenkins.env"
+        path.write_text(
+            "export JENKINS_USER='file-user'\n"
+            "export JENKINS_API_TOKEN='file-token'\n")
+        path.chmod(0o600)
+        return path
+
+    def test_credentials_file_when_environment_is_missing(self):
+        self.credentials_file(Path(self.env["XDG_CONFIG_HOME"]))
+        self.env.pop("JENKINS_USER")
+        self.env.pop("JENKINS_API_TOKEN")
+        process, master = self.launch("\n\n\n\n\n\n\n\ny\n")
+        output = self.until(master, b"Jenkins accepted the build request")
+        self.assertEqual(process.wait(timeout=5), 0)
+        requests = [json.loads(line) for line in self.requests.read_text().splitlines()]
+        self.assertIn('user = "file-user:file-token"', requests[-1]["auth_config"])
+        self.assertNotIn("file-token", output)
+        self.assertNotIn("file-token", " ".join(requests[-1]["args"]))
+
+    def test_incomplete_credentials_file_shows_resolution_instructions(self):
+        path = self.credentials_file(Path(self.env["XDG_CONFIG_HOME"]))
+        path.write_text("export JENKINS_USER='file-user'\n")
+        self.env.pop("JENKINS_USER")
+        self.env.pop("JENKINS_API_TOKEN")
+        result = subprocess.run(
+            ["bash", str(ROOT / "handlers/build-hub-rpms.sh"),
+             json.dumps(self.command)],
+            env=self.env, capture_output=True, text=True)
+        self.assert_credentials_instructions(result, ("JENKINS_API_TOKEN",))
+
+    def test_credentials_file_defaults_to_home_config(self):
+        self.credentials_file(self.root / ".config")
+        self.env.pop("XDG_CONFIG_HOME")
+        self.env.pop("JENKINS_USER")
+        self.env.pop("JENKINS_API_TOKEN")
+        process, master = self.launch("\n\n\n\n\n\n\n\nn\n")
+        self.until(master, b"Build cancelled.")
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertFalse(self.requests.exists())
+
+    def test_existing_environment_does_not_load_credentials_file(self):
+        path = self.credentials_file(Path(self.env["XDG_CONFIG_HOME"]))
+        path.write_text("exit 99\n")
+        process, master = self.launch("\n\n\n\n\n\n\n\nn\n")
+        self.until(master, b"Build cancelled.")
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertFalse(self.requests.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

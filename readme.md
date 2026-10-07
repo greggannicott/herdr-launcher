@@ -48,6 +48,47 @@ The `run-script` type executes an external script. A command source just points 
 
 A leading `~` is expanded to `$HOME`. The script must exist and be executable (its own shebang picks the interpreter), and the popup stays open until it finishes.
 
+### Building Hub RPMs
+
+`Build - Generate Linux Build via Jenkins` asks for the job's branch, version, test, RPM,
+installation, and UI-mode parameters, then shows a summary for confirmation
+before requesting the Jenkins build. The Hub branch defaults to the current
+Git branch in the directory where the launcher was opened (`LAUNCH_DIR`, or the
+current directory when run directly). If the branch cannot be determined, the
+handler warns and falls back to `iisMultiSource`. Other text inputs retain their
+displayed defaults when left blank. Building RPMs and installation on
+`uk-r9-ib-003` default to off and must be explicitly enabled.
+
+The command requires `curl`, `jq`, and `JENKINS_USER` plus `JENKINS_API_TOKEN`.
+If either variable is missing from the launcher's environment, the handler
+sources `${XDG_CONFIG_HOME:-$HOME/.config}/herdr-launcher/jenkins.env`.
+This file is loaded only when this command runs; the launcher does not load
+interactive shell startup files such as `.zshrc.local`. Create the credentials
+file with permissions restricted to your user:
+
+```sh
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/herdr-launcher"
+(umask 077; touch "${XDG_CONFIG_HOME:-$HOME/.config}/herdr-launcher/jenkins.env")
+chmod 600 "${XDG_CONFIG_HOME:-$HOME/.config}/herdr-launcher/jenkins.env"
+```
+
+Add these exports to that file, replacing the placeholders with your credentials:
+
+```sh
+export JENKINS_USER='your-jenkins-user'
+export JENKINS_API_TOKEN='your-api-token'
+```
+
+If either credential is still missing or empty, the command names the missing
+variables and prints the file path, setup commands, and example exports.
+Save the credentials file and retry; no Herdr restart is needed.
+
+Use a Jenkins API token for an account with
+permission to build this job; the token is not stored in the plugin or passed
+as a command-line argument. The handler requests a CSRF crumb when Jenkins
+provides one and reports the queued build URL when available. A reachable job
+API does not by itself establish that the configured account has build access.
+
 ### Copilot reports
 
 The `copilot-report` type runs Copilot non-interactively in the directory where
