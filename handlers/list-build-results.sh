@@ -97,7 +97,7 @@ if [[ ! -s "$temp_dir/rows" ]]; then
   read -r -n 1 -s -p "Press any key to close"
   exit 0
 fi
-if selected="$(herdr_fzf "Build results> " --read0 --print0 --delimiter=$'\t' \
+if selected="$(herdr_fzf "Build results> " --no-hscroll --read0 --print0 --delimiter=$'\t' \
   --with-nth=1 --header-lines=1 --header-lines-border=inline --style=full <"$temp_dir/rows" | tr -d '\000')"; then
   IFS=$'\t' read -r _ url <<<"$selected"
   if [[ "$url" != "$jenkins_url/job/"* ]]; then

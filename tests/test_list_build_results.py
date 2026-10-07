@@ -93,6 +93,7 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
                             for request in requests))
         self.assertNotIn("secret-token", json.dumps(requests))
         self.assertIn("--with-nth=1", (self.root / "picker_args").read_text())
+        self.assertIn("--no-hscroll", (self.root / "picker_args").read_text())
 
     def test_linux_selection(self):
         self.env["TEST_SELECTION"] = "2"

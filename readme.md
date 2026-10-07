@@ -102,6 +102,8 @@ combines them in a newest-first fzf table with Platform, Build, Date/Time (UTC),
 Started, Result, and Hub Branch columns. Started shows the time since the build started
 as `just now`, minutes, hours, or days ago, calculated when the list is fetched.
 In-progress builds display `RUNNING`.
+Horizontal scrolling is disabled to keep columns aligned while filtering;
+matches beyond the visible width still filter results but may be off-screen.
 Select a row to open that build's Jenkins page in your default browser;
 Escape cancels. The command uses the same credentials file, requires account
 read access to both jobs, and reports API failures rather than showing a
