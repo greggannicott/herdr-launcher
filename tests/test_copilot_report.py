@@ -113,6 +113,20 @@ esac
             },
         })
 
+    def test_review_unstaged_changes_command(self):
+        command = json.loads(subprocess.check_output(
+            ["bash", str(ROOT / "commands/review-unstaged-changes.sh")], text=True))
+        self.assertEqual(command, {
+            "type": "copilot-report",
+            "label": "Code Review - Review Unstaged Changes",
+            "payload": {
+                "prompt": "Review only the unstaged changes",
+                "review_type": "unstaged",
+                "args": ["--agent", "code-reviewer", "--allow-tool", "shell(git:*)",
+                         "--allow-tool", "write"],
+            },
+        })
+
     def test_prompt_only_and_literal_arguments(self):
         for args in (None, [], ["value with spaces", "line one\nline two", "$(false)"]):
             with self.subTest(args=args):

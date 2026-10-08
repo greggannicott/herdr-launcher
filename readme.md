@@ -132,10 +132,11 @@ copilot --agent code-reviewer --allow-tool 'shell(git:*)' --allow-tool 'write' -
 ```
 
 `Review Staged Changes` uses the same Copilot reviewer to review the staged changes.
-The staged review saves as type `staged`; the branch review against
-`origin/iisMultiSource` saves as type `iisMultiSource`. Review commands save
-their complete report in the worktree root using a filename that identifies
-the review type, timestamp, and outcome—for example,
+`Review Unstaged Changes` reviews only unstaged changes, separate from staged
+changes. Staged and unstaged reviews save as types `staged` and `unstaged`;
+the branch review against `origin/iisMultiSource` saves as type
+`iisMultiSource`. Review commands save their complete report in the worktree
+root using a filename that identifies the review type, timestamp, and outcome—for example,
 `code-review-staged-2026-10-06-17-03.reject.out`.
 
 `Open AI Generated Code Review for this Worktree` lists `*.out` files in the worktree root.
