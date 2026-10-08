@@ -32,7 +32,7 @@ trap 'rm -f "$temp_dir/auth" "$temp_dir/Linux.json" "$temp_dir/Windows.json" "$t
 jenkins_write_auth_config "$temp_dir/auth"
 jobs=(Build_Hub_RPMs_FromGitHub Build_Hub_On_Windows_GitHUB)
 platforms=(Linux Windows)
-tree='builds[number,result,building,timestamp,url,actions[parameters[name,value]]]{0,25}'
+tree='builds[number,result,building,timestamp,url,actions[parameters[name,value],causes[shortDescription,userName,upstreamProject]]]{0,25}'
 for i in "${!jobs[@]}"; do
   platform="${platforms[$i]}"
   if ! status="$(curl --config "$temp_dir/auth" -sS --connect-timeout 10 --max-time 30 \
@@ -67,10 +67,12 @@ if ! jq -j -s --arg base "$jenkins_url" '
     elif $seconds < 86400 then "\($seconds / 3600 | floor)h ago"
     else "\($seconds / 86400 | floor)d ago"
     end;
-  def row: (.platform | pad(8)) + "  " + (.number | pad(7)) + "  " +
+  def status: if .building then "RUNNING" else .result // "UNKNOWN" end;
+  def row($build; $started; $result; $who): (.platform | pad(8)) + "  " + (.number | pad($build)) + "  " +
     ((.timestamp / 1000 | floor | strftime("%Y-%m-%d %H:%M")) | pad(16)) +
-    "  " + ((age) | pad(12)) +
-    "  " + ((if .building then "RUNNING" else .result // "UNKNOWN" end) | pad(12)) +
+    "  " + ((age) | pad($started)) +
+    "  " + (status | pad($result)) +
+    "  " + (.triggered_by | pad($who)) +
     "  " + .branch + "\t" + .link + "\u0000";
   [to_entries[] |
     (if .key == 0 then {platform: "Linux", job: "Build_Hub_RPMs_FromGitHub", branch_key: "IHub_TargetBranch"}
@@ -78,14 +80,22 @@ if ! jq -j -s --arg base "$jenkins_url" '
     .value.builds[] | . + $job |
     .branch = ([.actions[]?.parameters[]? | select(.name == $job.branch_key) | .value][0] // "-"
       | tostring | gsub("[\u0000-\u001f\u007f]"; " ")) |
+    .triggered_by = ([.actions[]?.causes[]? |
+        .userName // .upstreamProject //
+        (.shortDescription // empty | sub("^Started by (user )?"; "") | sub("^(?<c>.)"; .c | ascii_upcase))][0] // "-"
+      | tostring | gsub("[\u0000-\u001f\u007f]"; " ")) |
     .link = ($base + "/job/" + .job + "/" + (.number | tostring) + "/")
   ] | sort_by(.timestamp) | reverse |
   if length == 0 then empty else
-    (("Platform" | pad(8)) + "  " + ("Build" | pad(7)) + "  " +
-      ("Date/Time (UTC)" | pad(16)) + "  " + ("Started" | pad(12)) +
-      "  " + ("Result" | pad(12)) +
+    ([.[].number | tostring | length] + [5] | max) as $build |
+    ([.[] | age | length] + [7] | max) as $started |
+    ([.[] | status | length] + [6] | max) as $result |
+    ([.[].triggered_by | length] + [12] | max) as $who |
+    (("Platform" | pad(8)) + "  " + ("Build" | pad($build)) + "  " +
+      ("Date/Time (UTC)" | pad(16)) + "  " + ("Started" | pad($started)) +
+      "  " + ("Result" | pad($result)) + "  " + ("Triggered By" | pad($who)) +
       "  Hub Branch\u0000"),
-    (.[] | row)
+    (.[] | row($build; $started; $result; $who))
   end
 ' "$temp_dir/Linux.json" "$temp_dir/Windows.json" >"$temp_dir/rows"; then
   printf 'Error: could not format Jenkins build results\n' >&2

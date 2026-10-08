@@ -99,8 +99,9 @@ credentials file and does not load interactive shell startup files.
 
 `Build - List Build Results` fetches the latest 25 builds from each job and
 combines them in a newest-first fzf table with Platform, Build, Date/Time (UTC),
-Started, Result, and Hub Branch columns. Started shows the time since the build started
+Started, Result, Triggered By, and Hub Branch columns. Started shows the time since the build started
 as `just now`, minutes, hours, or days ago, calculated when the list is fetched.
+Triggered By shows the user who started the build, or the upstream project or trigger (for example `Timer`) for automated builds.
 In-progress builds display `RUNNING`.
 Horizontal scrolling is disabled to keep columns aligned while filtering;
 matches beyond the visible width still filter results but may be off-screen.

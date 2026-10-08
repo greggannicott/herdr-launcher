@@ -15,6 +15,6 @@ command = ["bash", "open.sh"]
 id = "launcher"
 title = "Command Launcher"
 placement = "popup"
-width = 100
+width = 120
 height = 30
 command = ["bash", "launcher.sh"]

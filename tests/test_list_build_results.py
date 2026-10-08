@@ -46,16 +46,21 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
 """
         self.script("open", browser)
         self.script("xdg-open", browser)
-        for platform, number, timestamp, building, result, key in [
-            ("Linux", 12, 1700000000000, False, "FAILURE", "IHub_TargetBranch"),
-            ("Windows", 34, 1700000060000, True, None, "TargetBranch"),
+        for platform, number, timestamp, building, result, key, cause in [
+            ("Linux", 12, 1700000000000, False, "FAILURE", "IHub_TargetBranch",
+             {"shortDescription": "Started by user Test User",
+              "userName": "Test User"}),
+            ("Windows", 34, 1700000060000, True, None, "TargetBranch",
+             {"shortDescription": 'Started by upstream project "Nightly" build number 7',
+              "upstreamProject": "Nightly"}),
         ]:
             (self.root / f"{platform}.json").write_text(json.dumps({
                 "builds": [{
                     "number": number, "timestamp": timestamp,
                     "building": building, "result": result,
                     "actions": [{"parameters": [{"name": key,
-                                                  "value": f"feature/{platform}"}]}],
+                                                  "value": f"feature/{platform}"}]},
+                                {"causes": [cause]}],
                 }],
             }))
 
@@ -79,6 +84,9 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
         self.assertIn("Date/Time (UTC)", rows[0])
         self.assertIn("Started", rows[0])
         self.assertIn("Hub Branch", rows[0])
+        self.assertIn("Triggered By", rows[0])
+        self.assertIn("Nightly", rows[1])
+        self.assertIn("Test User", rows[2])
         self.assertTrue(rows[1].startswith("Windows"))
         self.assertIn("RUNNING", rows[1])
         self.assertIn("feature/Windows", rows[1])
@@ -107,14 +115,15 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
         self.assertEqual(result.returncode, 0, result.stderr)
         header, windows, linux, _ = (
             (self.root / "picker").read_bytes().decode().split("\0"))
-        for row, number, status, branch in (
-            (windows, "34", "RUNNING", "feature/Windows"),
-            (linux, "12", "FAILURE", "feature/Linux"),
+        for row, number, status, who, branch in (
+            (windows, "34", "RUNNING", "Nightly", "feature/Windows"),
+            (linux, "12", "FAILURE", "Test User", "feature/Linux"),
         ):
             for label, value in (
                 ("Build", number),
                 ("Date/Time (UTC)", "2023-"),
                 ("Result", status),
+                ("Triggered By", who),
                 ("Hub Branch", branch),
             ):
                 with self.subTest(platform=row[:7], column=label):
