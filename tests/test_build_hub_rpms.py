@@ -22,6 +22,7 @@ class JenkinsBuildTestCase(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.requests = self.root / "requests.jsonl"
+        self.notifications = self.root / "notifications.jsonl"
         self.script("curl", """#!/usr/bin/env python3
 import json
 import os
@@ -49,6 +50,15 @@ else:
         body.write("Build response")
     print(os.environ.get("JENKINS_TEST_BUILD_STATUS", "201"))
 """)
+        self.script("herdr", """#!/usr/bin/env python3
+import json
+import os
+import sys
+
+with open(os.environ["HERDR_TEST_NOTIFICATIONS"], "a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\\n")
+sys.exit(int(os.environ.get("HERDR_TEST_NOTIFICATION_STATUS", "0")))
+""")
         self.env = dict(
             os.environ,
             PATH=f"{self.bin}:{os.environ['PATH']}",
@@ -58,6 +68,8 @@ else:
             HOME=str(self.root),
             XDG_CONFIG_HOME=str(self.root / "config"),
             LAUNCH_DIR=str(self.root),
+            HERDR_BIN_PATH=str(self.bin / "herdr"),
+            HERDR_TEST_NOTIFICATIONS=str(self.notifications),
         )
         self.command = json.loads(subprocess.check_output(
             ["bash", str(ROOT / f"commands/{self.command_source}.sh")], text=True))
@@ -89,6 +101,19 @@ else:
             self.assertTrue(ready, output.decode())
             output += os.read(master, 65536)
         return output.decode()
+
+    def assert_notification(self, job_name):
+        notifications = [
+            json.loads(line) for line in self.notifications.read_text().splitlines()
+        ]
+        self.assertEqual(len(notifications), 1)
+        self.assertEqual(notifications[0][:3], [
+            "notification", "show", "Jenkins build triggered",
+        ])
+        self.assertEqual(notifications[0][3], "--body")
+        self.assertIn(job_name, notifications[0][4])
+        self.assertIn("https://jenkins.example/queue/item/42/", notifications[0][4])
+        self.assertEqual(notifications[0][5:], ["--sound", "done"])
 
 
 class BuildHubRpmsTests(JenkinsBuildTestCase):
@@ -136,6 +161,7 @@ class BuildHubRpmsTests(JenkinsBuildTestCase):
         self.assertIn("Install on uk-r9-ib-003: true", output)
         self.assertIn("Jenkins accepted the build request (HTTP 201)", output)
         self.assertEqual(process.wait(timeout=5), 0)
+        self.assert_notification("Build_Hub_RPMs_FromGitHub")
 
         requests = [json.loads(line) for line in self.requests.read_text().splitlines()]
         self.assertEqual(len(requests), 2)
@@ -285,6 +311,7 @@ class BuildHubWindowsTests(JenkinsBuildTestCase):
         self.assertIn("Hub branch [feature/windows]", output)
         self.assertIn("FIPS mode:              false", output)
         self.assertIn("https://jenkins.example/queue/item/42/", output)
+        self.assert_notification("Build_Hub_On_Windows_GitHUB")
         self.assertNotIn("Hub version number", output)
         requests = [json.loads(line) for line in self.requests.read_text().splitlines()]
         self.assertEqual(len(requests), 2)
@@ -354,6 +381,14 @@ class BuildHubWindowsTests(JenkinsBuildTestCase):
         process, master = self.launch("\n" * 9 + "y\n")
         self.until(master, b"Jenkins rejected the build request (HTTP 403)")
         self.assertNotEqual(process.wait(timeout=5), 0)
+        self.assertFalse(self.notifications.exists())
+
+    def test_notification_failure_does_not_change_accepted_build_status(self):
+        self.env["HERDR_TEST_NOTIFICATION_STATUS"] = "1"
+        process, master = self.launch("\n" * 9 + "y\n")
+        output = self.until(master, b"could not be displayed")
+        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertIn("Jenkins accepted the build request", output)
 
     def test_failed_crumb_does_not_submit_build(self):
         self.env["JENKINS_TEST_CRUMB_STATUS"] = "401"

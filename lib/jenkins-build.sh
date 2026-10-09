@@ -144,6 +144,14 @@ case "$build_status" in
     if [[ -n "$queue_url" ]]; then
       printf 'Queue: %s\n' "$queue_url"
     fi
+    notification_body="$job_name"
+    if [[ -n "$queue_url" ]]; then
+      notification_body+=" - $queue_url"
+    fi
+    if ! "${HERDR_BIN_PATH:-herdr}" notification show \
+      "Jenkins build triggered" --body "$notification_body" --sound done; then
+      printf 'Warning: Jenkins accepted the build request, but the Herdr notification could not be displayed.\n' >&2
+    fi
     ;;
   *)
     printf 'Error: Jenkins rejected the build request (HTTP %s)\n' "$build_status" >&2

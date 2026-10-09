@@ -95,7 +95,9 @@ There is no Windows version-number input.
 Both commands share the prompts, confirmation, credentials-file loading, CSRF
 handling, and build submission in `lib/jenkins-build.sh`. Job-specific parameter
 names and defaults live in their handlers. The Windows command uses the same
-credentials file and does not load interactive shell startup files.
+credentials file and does not load interactive shell startup files. When
+Jenkins accepts either build request, Herdr displays a completion notification
+with the job name and queue URL when available.
 
 `Build - List Build Results` fetches the latest 25 builds from each job and
 combines them in a newest-first fzf table with Platform, Build, Date/Time (UTC),
