@@ -32,6 +32,8 @@ if [[ ! -x "$script" ]]; then
   exit 1
 fi
 
+cd "${LAUNCH_DIR:-$PWD}"
+
 if [[ "$has_args" == true ]]; then
   args=()
   while IFS= read -r arg; do
