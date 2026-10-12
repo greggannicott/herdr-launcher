@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import subprocess
 import time
@@ -91,7 +92,8 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
         self.assertIn("RUNNING", rows[1])
         self.assertIn("feature/Windows", rows[1])
         self.assertTrue(rows[2].startswith("Linux"))
-        self.assertIn("FAILURE", rows[2])
+        self.assertIn("\x1b[38;2;224;108;117mFAILURE", rows[2])
+        self.assertIn("\x1b[38;2;229;192;123mRUNNING", rows[1])
         self.assertEqual(
             (self.root / "opened").read_text(),
             "https://v-jenkins.syncdi1.us.syncsort.com/job/Build_Hub_On_Windows_GitHUB/34/")
@@ -114,7 +116,8 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
         result = self.run_handler()
         self.assertEqual(result.returncode, 0, result.stderr)
         header, windows, linux, _ = (
-            (self.root / "picker").read_bytes().decode().split("\0"))
+            re.sub(r"\x1b\[[0-9;]*m", "", (self.root / "picker").read_bytes().decode())
+            .split("\0"))
         for row, number, status, who, branch in (
             (windows, "34", "RUNNING", "Nightly", "feature/Windows"),
             (linux, "12", "FAILURE", "Test User", "feature/Linux"),
@@ -151,6 +154,16 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
             row = next(row for row in rows
                        if row.startswith(f"Linux     {number} "))
             self.assertIn(expected, row)
+
+    def test_success_is_green(self):
+        build = {"number": 1, "timestamp": int(time.time() * 1000),
+                 "building": False, "result": "SUCCESS"}
+        (self.root / "Linux.json").write_text(json.dumps({"builds": [build]}))
+        (self.root / "Windows.json").write_text('{"builds":[]}')
+        result = self.run_handler()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = (self.root / "picker").read_bytes().decode().split("\0")
+        self.assertIn("\x1b[38;2;152;195;121mSUCCESS", rows[1])
 
     def test_cancel_does_not_open_browser(self):
         self.env["TEST_FZF_STATUS"] = "130"

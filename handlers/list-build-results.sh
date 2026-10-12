@@ -71,7 +71,11 @@ if ! jq -j -s --arg base "$jenkins_url" '
   def row($build; $started; $result; $who): (.platform | pad(8)) + "  " + (.number | pad($build)) + "  " +
     ((.timestamp / 1000 | floor | strftime("%Y-%m-%d %H:%M")) | pad(16)) +
     "  " + ((age) | pad($started)) +
-    "  " + (status | pad($result)) +
+    "  " + (status as $s | $s | pad($result) |
+      if $s == "FAILURE" then "\u001b[38;2;224;108;117m" + . + "\u001b[0m"
+      elif $s == "SUCCESS" then "\u001b[38;2;152;195;121m" + . + "\u001b[0m"
+      elif $s == "RUNNING" then "\u001b[38;2;229;192;123m" + . + "\u001b[0m"
+      else . end) +
     "  " + (.triggered_by | pad($who)) +
     "  " + .branch + "\t" + .link + "\u0000";
   [to_entries[] |
