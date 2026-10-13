@@ -72,7 +72,7 @@ if ! jq -j -s --arg base "$jenkins_url" '
     ((.timestamp / 1000 | floor | strftime("%Y-%m-%d %H:%M")) | pad(16)) +
     "  " + ((age) | pad($started)) +
     "  " + (status as $s | $s | pad($result) |
-      if $s == "FAILURE" then "\u001b[38;2;224;108;117m" + . + "\u001b[0m"
+      if $s == "FAILURE" or $s == "UNSTABLE" then "\u001b[38;2;224;108;117m" + . + "\u001b[0m"
       elif $s == "SUCCESS" then "\u001b[38;2;152;195;121m" + . + "\u001b[0m"
       elif $s == "RUNNING" then "\u001b[38;2;229;192;123m" + . + "\u001b[0m"
       else . end) +

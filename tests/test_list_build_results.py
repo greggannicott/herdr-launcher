@@ -165,6 +165,16 @@ sys.exit(int(os.environ.get("TEST_BROWSER_STATUS", "0")))
         rows = (self.root / "picker").read_bytes().decode().split("\0")
         self.assertIn("\x1b[38;2;152;195;121mSUCCESS", rows[1])
 
+    def test_unstable_is_red(self):
+        build = {"number": 1, "timestamp": int(time.time() * 1000),
+                 "building": False, "result": "UNSTABLE"}
+        (self.root / "Linux.json").write_text(json.dumps({"builds": [build]}))
+        (self.root / "Windows.json").write_text('{"builds":[]}')
+        result = self.run_handler()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = (self.root / "picker").read_bytes().decode().split("\0")
+        self.assertIn("\x1b[38;2;224;108;117mUNSTABLE", rows[1])
+
     def test_cancel_does_not_open_browser(self):
         self.env["TEST_FZF_STATUS"] = "130"
         result = self.run_handler()
