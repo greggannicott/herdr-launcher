@@ -48,7 +48,7 @@ for item in items:
     if item.endswith(b"\\t" + selected):
         with open(os.environ["FZF_ITEMS"], "wb") as output:
             output.write(b"\\0".join(items))
-        sys.stdout.buffer.write(os.environ.get("FAKE_FZF_KEY", "").encode() + b"\\0" + item + b"\\0")
+        sys.stdout.buffer.write(item + b"\\0")
         break
 """)
         self.script("nvim", "#!/usr/bin/env bash\nexit 0\n")
@@ -106,7 +106,7 @@ elif sys.argv[1:3] == ["pane", "current"]:
         self.assertIn("--header-lines=1", fzf_args)
         self.assertIn("--header-lines-border=inline", fzf_args)
         self.assertIn("--style=full", fzf_args)
-        self.assertIn("--expect=ctrl-q", fzf_args)
+        self.assertFalse([a for a in fzf_args if a.startswith("--expect")])
         rows = self.fzf_items.read_bytes().split(b"\0")
         visible_rows = {
             row.split(b"\t")[1]: re.sub(rb"\x1b\[[0-9;]*m", b"", row.split(b"\t")[0])
@@ -154,41 +154,17 @@ elif sys.argv[1:3] == ["pane", "current"]:
             shlex.split(calls[1][3]),
             ["exec", "nvim", "--", str(self.review.resolve())])
 
-    def test_ctrl_q_opens_quickfix_list(self):
-        quickfix = self.worktree / "code-review-staged-2026-10-06-15-51.reject.qf"
-        quickfix.write_text("a.go:1:1: error: [High] Bug\n")
-        self.env["FAKE_FZF_KEY"] = "ctrl-q"
+
+    def test_review_with_quickfix_opens_report_with_list(self):
+        stem = "code-review-staged-2026-10-06-15-51.reject"
+        (self.worktree / f"{stem}.qf").write_text("a.go:1:1: error: [High] Bug\n")
         result = self.run_handler()
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
-        self.assertEqual(calls[0][calls[0].index("--label") + 1],
-                         "Quickfix - code-review-staged-2026-10-06-15-51.reject.qf")
         self.assertEqual(
             shlex.split(calls[1][3]),
-            ["exec", "nvim", "-c", "copen", "-q", str(quickfix.resolve())])
-
-    def test_ctrl_q_without_quickfix_file_is_an_error(self):
-        self.env["FAKE_FZF_KEY"] = "ctrl-q"
-        master, slave = pty.openpty()
-        process = subprocess.Popen(
-            ["bash", str(ROOT / "handlers/open-code-review.sh"),
-             json.dumps({"type": "open-code-review"})],
-            env=self.env, stdin=slave, stdout=slave, stderr=slave)
-        os.close(slave)
-        self.addCleanup(os.close, master)
-        self.addCleanup(lambda: process.kill() if process.poll() is None else None)
-        output = b""
-        deadline = time.monotonic() + 5
-        while b"Press any key to close" not in output:
-            remaining = deadline - time.monotonic()
-            self.assertGreater(remaining, 0, output.decode())
-            ready, _, _ = select.select([master], [], [], remaining)
-            self.assertTrue(ready, output.decode())
-            output += os.read(master, 65536)
-        self.assertIn(b"No quickfix findings found", output)
-        os.write(master, b"x")
-        self.assertEqual(process.wait(timeout=5), 1)
-        self.assertFalse(self.log.exists())
+            ["exec", "nvim", "-c", f"cgetfile {stem}.qf", "-c", "copen",
+             "-c", "wincmd p", "--", f"{stem}.out"])
 
     def test_invalid_review_filename_is_an_error(self):
         (self.worktree / "other-review.out").write_text("Review")

@@ -2,7 +2,9 @@ import json
 import os
 from pathlib import Path
 import pty
+import re
 import select
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -135,6 +137,78 @@ esac
             },
         })
 
+    def setup_review(self, qf_lines, choice):
+        stem = "code-review-iisMultiSource-2026-10-06-17-03.reject"
+        (self.cwd / f"{stem}.out").write_text("Report")
+        if qf_lines is not None:
+            (self.cwd / f"{stem}.qf").write_text(qf_lines)
+        self.script("fzf", """#!/usr/bin/env python3
+import os, sys
+lines = sys.stdin.read().splitlines()
+if os.environ["FAKE_CHOICE"] == "cancel":
+    sys.exit(130)
+print(lines[int(os.environ["FAKE_CHOICE"])])
+""")
+        self.script("herdr", """#!/usr/bin/env python3
+import json, os, sys
+with open(os.environ["HERDR_LOG"], "a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1:3] == ["tab", "create"]:
+    print(json.dumps({"result": {"root_pane": {"pane_id": "w1:p2"}}}))
+""")
+        self.herdr_log = self.root / "herdr.jsonl"
+        self.env.update(FAKE_CHOICE=str(choice), HERDR_LOG=str(self.herdr_log),
+                        HERDR_WORKSPACE_ID="w1",
+                        HERDR_BIN_PATH=str(self.bin / "herdr"))
+        return stem
+
+    def finish_review(self):
+        process, master = self.handler()
+        output = b""
+        deadline = time.monotonic() + 5
+        while process.poll() is None:
+            self.assertGreater(deadline - time.monotonic(), 0, output.decode())
+            if select.select([master], [], [], 0.1)[0]:
+                output += os.read(master, 65536)
+        while select.select([master], [], [], 0)[0]:
+            try:
+                chunk = os.read(master, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            output += chunk
+        return process.returncode, re.sub(r"\x1b\[[0-9;]*m", "", output.decode())
+
+    def test_review_summary_counts_findings_and_opens_report_with_quickfix(self):
+        stem = self.setup_review(
+            "a.go:1:1: error: [High] One\nb.go:2:1: warning: [Medium] Two\n"
+            "c.go:3:1: error: [High] Three\n", 0)
+        status, output = self.finish_review()
+        self.assertEqual(status, 0, output)
+        self.assertIn("3 issue(s) found (2 High, 1 Medium)", output)
+        calls = [json.loads(line) for line in self.herdr_log.read_text().splitlines()]
+        self.assertEqual(calls[0][:2], ["tab", "create"])
+        self.assertEqual(shlex.split(calls[1][3]), [
+            "exec", "nvim", "-c", f"cgetfile {stem}.qf", "-c", "copen", "-c", "wincmd p",
+            "--", f"{stem}.out"])
+
+    def test_review_summary_close_does_not_open_anything(self):
+        self.setup_review("a.go:1:1: error: [High] One\n", 1)
+        status, output = self.finish_review()
+        self.assertEqual(status, 0, output)
+        self.assertIn("1 issue(s) found (1 High)", output)
+        self.assertFalse(self.herdr_log.exists())
+
+    def test_review_summary_without_findings_opens_report_only(self):
+        stem = self.setup_review("", 0)
+        status, output = self.finish_review()
+        self.assertEqual(status, 0, output)
+        self.assertIn("No issues found.", output)
+        calls = [json.loads(line) for line in self.herdr_log.read_text().splitlines()]
+        self.assertEqual(shlex.split(calls[1][3]),
+                         ["exec", "nvim", "--", str(self.cwd / f"{stem}.out")])
+
     def test_prompt_only_and_literal_arguments(self):
         for args in (None, [], ["value with spaces", "line one\nline two", "$(false)"]):
             with self.subTest(args=args):
@@ -202,6 +276,7 @@ print("Review report", flush=True)
         shutil.copy2(ROOT / "commands/review-branch.sh", plugin / "commands")
         shutil.copy2(ROOT / "handlers/copilot-report.sh", plugin / "handlers")
         shutil.copy2(ROOT / "lib/fzf.sh", plugin / "lib")
+        shutil.copy2(ROOT / "lib/code-review.sh", plugin / "lib")
         self.script("fzf", "#!/usr/bin/env bash\nhead -n 1\n")
         self.env["HERDR_PLUGIN_ROOT"] = str(plugin)
         for status in (0, 7):

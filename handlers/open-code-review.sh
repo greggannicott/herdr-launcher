@@ -5,6 +5,7 @@ json="${1:-}"
 launch_dir="${LAUNCH_DIR:-$PWD}"
 plugin_root="${HERDR_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 source "$plugin_root/lib/fzf.sh"
+source "$plugin_root/lib/code-review.sh"
 
 if [[ -z "$json" ]]; then
   printf 'Error: no command JSON provided\n' >&2
@@ -24,20 +25,6 @@ fi
 if ! command -v nvim >/dev/null 2>&1; then
   printf 'Error: open-code-review requires nvim on PATH\n' >&2
   exit 1
-fi
-
-workspace_id="${HERDR_WORKSPACE_ID:-}"
-herdr="${HERDR_BIN_PATH:-herdr}"
-if [[ -z "$workspace_id" ]]; then
-  if ! pane_context="$("$herdr" pane current --current)"; then
-    printf 'Error: could not get the calling pane context from Herdr\n' >&2
-    exit 1
-  fi
-  workspace_id="$(jq -r '.result.pane.workspace_id // empty' <<<"$pane_context")"
-  if [[ -z "$workspace_id" ]]; then
-    printf 'Error: Herdr did not return a workspace for the calling pane\n' >&2
-    exit 1
-  fi
 fi
 
 if ! worktree_root="$(git -C "$launch_dir" rev-parse --show-toplevel 2>/dev/null)"; then
@@ -106,14 +93,11 @@ printf -v header '%s%-14s%s  %s%-10s%s  %s%-5s%s  %s%s%s' \
   "$HERDR_FZF_HEADER" "Time" "$HERDR_FZF_RESET" \
   "$HERDR_FZF_HEADER" "Status" "$HERDR_FZF_RESET"
 
-key=""
 selected=""
-if ! { IFS= read -r -d '' key && IFS= read -r -d '' selected; } < <(
+if ! IFS= read -r -d '' selected < <(
   printf '%s\0' "$header" "${reviews[@]}" |
     herdr_fzf "Code review> " --read0 --print0 --delimiter=$'\t' \
-      --with-nth=1 --header-lines=1 --header-lines-border=inline --style=full \
-      --expect=ctrl-q \
-      --footer="enter: open report  ctrl-q: open quickfix list"
+      --with-nth=1 --header-lines=1 --header-lines-border=inline --style=full
 ); then
   exit 0
 fi
@@ -124,38 +108,4 @@ if [[ ! -f "$selected" ]]; then
   exit 1
 fi
 
-open_target="$selected"
-nvim_args="--"
-label="Code Review - $(basename "$selected")"
-if [[ "$key" == "ctrl-q" ]]; then
-  quickfix="${selected%.out}.qf"
-  if [[ ! -s "$quickfix" ]]; then
-    printf 'No quickfix findings found at %s\n' "$quickfix" >&2
-    read -r -n 1 -s -p "Press any key to close"
-    exit 1
-  fi
-  open_target="$quickfix"
-  nvim_args="-c copen -q"
-  label="Quickfix - $(basename "$quickfix")"
-fi
-
-if ! tab_result="$("$herdr" tab create \
-  --workspace "$workspace_id" \
-  --cwd "$worktree_root" \
-  --label "$label" \
-  --focus)"; then
-  printf 'Error: could not create a Herdr tab for the code review\n' >&2
-  exit 1
-fi
-
-pane_id="$(jq -r '.result.root_pane.pane_id // empty' <<<"$tab_result")"
-if [[ -z "$pane_id" ]]; then
-  printf 'Error: Herdr did not return the new tab pane ID\n' >&2
-  exit 1
-fi
-
-printf -v quoted_target '%q' "$open_target"
-if ! "$herdr" pane run "$pane_id" "exec nvim $nvim_args $quoted_target"; then
-  printf 'Error: could not open the code review in the new Herdr tab\n' >&2
-  exit 1
-fi
+herdr_open_review "$worktree_root" "$selected" both || exit 1

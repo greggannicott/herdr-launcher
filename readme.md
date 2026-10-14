@@ -145,9 +145,14 @@ root using a filename that identifies the review type, timestamp, and outcome—
 Files use the format `code-review-{type}-{yyyy-mm-dd}-{hh-mm}.{status}.out`.
 Older files without a type remain listed as `legacy`. The picker shows Type,
 Date, Time, and Status columns with an inline header. Press Enter to create
-and focus a Herdr tab in that worktree and open the report in `nvim`, or press
-`ctrl-q` to open the review's `.qf` quickfix file there instead (`nvim -c copen -q`).
-`ctrl-q` reports an error if the review has no `.qf` file or it is empty.
+and focus a Herdr tab in that worktree that opens the report in `nvim` with the
+review's `.qf` quickfix list pre-populated and open beneath it. Reviews with no
+`.qf` file, or no findings, open as just the report.
+
+When a review finishes, the popup shows the number of issues found, broken down by
+severity, and offers a choice: open the report in Neovim with the quickfix list
+open beneath it (just the report if there are no findings), or close. It opens in
+a new Herdr tab. The list is populated but doesn't jump away from the report.
 
 Each review also saves a Neovim quickfix file beside the report, with the same
 name but a `.qf` extension (for example,
@@ -160,7 +165,7 @@ iris/domain/demz/requestHandler.go:960:1: error: [High] CICSPlex scope discovery
 Severity maps to the type: Critical/High is `error`, Medium is `warning`, and
 Low is `info`. An accepted review produces an empty file. Load it from the
 worktree root with `nvim -q <file>.qf` or `:cfile <file>.qf`, then `:copen`.
-The picker lists only `.out` files; `ctrl-q` opens the matching `.qf` file.
+The picker lists only `.out` files and loads the matching `.qf` file alongside.
 
 Additional report commands can reuse the same handler by supplying a nonempty
 `prompt` and an optional array of Copilot arguments (each argument is passed

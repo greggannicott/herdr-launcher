@@ -20,6 +20,50 @@ fi
 
 cd "${LAUNCH_DIR:-$PWD}"
 
+plugin_root="${HERDR_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+source "$plugin_root/lib/fzf.sh"
+source "$plugin_root/lib/code-review.sh"
+
+# Shows the findings summary for a finished review and offers to open it.
+review_summary() {
+  local report quickfix total severity count line="" choice
+  local -a reports=("$worktree_root/code-review-${review_type}-${review_date}-${review_time}."*.out)
+  report="${reports[0]}"
+  if [[ ! -f "$report" ]] || ! command -v fzf >/dev/null 2>&1; then
+    printf 'Review report not found or fzf unavailable; nothing to open.\n'
+    read -r -n 1 -s -p "Press any key to close"
+    return 0
+  fi
+  quickfix="${report%.out}.qf"
+  total=0
+  [[ -f "$quickfix" ]] && total="$(grep -c . "$quickfix" || true)"
+
+  printf '%s%s%s\n' "$HERDR_FZF_HEADER" "Review complete: $(basename "$report")" "$HERDR_FZF_RESET"
+  if (( total == 0 )); then
+    printf '%sNo issues found.%s\n\n' "$HERDR_FZF_MARKER" "$HERDR_FZF_RESET"
+  else
+    for severity in Critical High Medium Low; do
+      count="$(grep -c "\\[$severity\\]" "$quickfix" || true)"
+      (( count > 0 )) && line+="${line:+, }$count $severity"
+    done
+    printf '%s%s issue(s) found%s%s%s\n\n' "$HERDR_FZF_POINTER" "$total" \
+      "${line:+ ($line)}" "$HERDR_FZF_RESET" ""
+  fi
+
+  local open_label="View full report in Neovim" open_mode=report
+  if (( total > 0 )); then
+    open_label="View report and suggestions in Neovim (Quickfix List)"
+    open_mode=both
+  fi
+  if ! choice="$(printf '%s\n' "$open_label" "Close" |
+    herdr_fzf "Next> " --no-multi --height=~6)"; then
+    return 0
+  fi
+  if [[ "$choice" == "$open_label" ]]; then
+    herdr_open_review "$worktree_root" "$report" "$open_mode" || return 1
+  fi
+}
+
 args=()
 while IFS= read -r -d '' arg; do
   args+=("$arg")
@@ -49,7 +93,11 @@ printf 'Starting Copilot. Report output will appear below; this may take a few m
 args+=(-p "$prompt")
 if copilot "${args[@]}"; then
   printf '\n'
-  read -r -n 1 -s -p "Press any key to close"
+  if [[ -n "$review_type" ]]; then
+    review_summary || exit 1
+  else
+    read -r -n 1 -s -p "Press any key to close"
+  fi
 else
   status=$?
   printf '\nError: Copilot exited with status %s\n' "$status" >&2
