@@ -106,11 +106,14 @@ printf -v header '%s%-14s%s  %s%-10s%s  %s%-5s%s  %s%s%s' \
   "$HERDR_FZF_HEADER" "Time" "$HERDR_FZF_RESET" \
   "$HERDR_FZF_HEADER" "Status" "$HERDR_FZF_RESET"
 
-printf -v selected ''
-if ! IFS= read -r -d '' selected < <(
+key=""
+selected=""
+if ! { IFS= read -r -d '' key && IFS= read -r -d '' selected; } < <(
   printf '%s\0' "$header" "${reviews[@]}" |
     herdr_fzf "Code review> " --read0 --print0 --delimiter=$'\t' \
-      --with-nth=1 --header-lines=1 --header-lines-border=inline --style=full
+      --with-nth=1 --header-lines=1 --header-lines-border=inline --style=full \
+      --expect=ctrl-q \
+      --footer="enter: open report  ctrl-q: open quickfix list"
 ); then
   exit 0
 fi
@@ -121,7 +124,21 @@ if [[ ! -f "$selected" ]]; then
   exit 1
 fi
 
+open_target="$selected"
+nvim_args="--"
 label="Code Review - $(basename "$selected")"
+if [[ "$key" == "ctrl-q" ]]; then
+  quickfix="${selected%.out}.qf"
+  if [[ ! -s "$quickfix" ]]; then
+    printf 'No quickfix findings found at %s\n' "$quickfix" >&2
+    read -r -n 1 -s -p "Press any key to close"
+    exit 1
+  fi
+  open_target="$quickfix"
+  nvim_args="-c copen -q"
+  label="Quickfix - $(basename "$quickfix")"
+fi
+
 if ! tab_result="$("$herdr" tab create \
   --workspace "$workspace_id" \
   --cwd "$worktree_root" \
@@ -137,8 +154,8 @@ if [[ -z "$pane_id" ]]; then
   exit 1
 fi
 
-printf -v quoted_review '%q' "$selected"
-if ! "$herdr" pane run "$pane_id" "exec nvim -- $quoted_review"; then
+printf -v quoted_target '%q' "$open_target"
+if ! "$herdr" pane run "$pane_id" "exec nvim $nvim_args $quoted_target"; then
   printf 'Error: could not open the code review in the new Herdr tab\n' >&2
   exit 1
 fi

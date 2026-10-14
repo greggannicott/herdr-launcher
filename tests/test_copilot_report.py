@@ -91,7 +91,15 @@ esac
                      "Save the complete review report at "
                      f"{self.cwd}/code-review-iisMultiSource-2026-10-06-17-03.{{status}}.out. "
                      "Replace {status} with reject if there are actionable findings, or accept "
-                     "if there are none. Keep the type, date, and time in the filename unchanged."],
+                     "if there are none. Keep the type, date, and time in the filename unchanged.\n\n"
+                     "Also save a Neovim quickfix file at "
+                     f"{self.cwd}/code-review-iisMultiSource-2026-10-06-17-03.{{status}}.qf, "
+                     "using the same {status} value as the report. Write one line per actionable "
+                     "finding, in exactly this format: path:line:1: type: [Severity] title. Use the "
+                     "repository-relative path and line from the finding, a single-line title, and "
+                     "type error for Critical or High, warning for Medium, or info for Low. Output "
+                     "only these lines with no headings, blank lines, or extra text. If there are "
+                     "no findings, create an empty file."],
             "cwd": str(self.cwd),
         })
         self.assertIn("Review report", output)

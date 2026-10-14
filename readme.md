@@ -144,8 +144,23 @@ root using a filename that identifies the review type, timestamp, and outcome—
 `Open AI Generated Code Review for this Worktree` lists `*.out` files in the worktree root.
 Files use the format `code-review-{type}-{yyyy-mm-dd}-{hh-mm}.{status}.out`.
 Older files without a type remain listed as `legacy`. The picker shows Type,
-Date, Time, and Status columns with an inline header. Selecting a review creates
-and focuses a Herdr tab in that worktree and opens the file in `nvim`.
+Date, Time, and Status columns with an inline header. Press Enter to create
+and focus a Herdr tab in that worktree and open the report in `nvim`, or press
+`ctrl-q` to open the review's `.qf` quickfix file there instead (`nvim -c copen -q`).
+`ctrl-q` reports an error if the review has no `.qf` file or it is empty.
+
+Each review also saves a Neovim quickfix file beside the report, with the same
+name but a `.qf` extension (for example,
+`code-review-staged-2026-10-06-17-03.reject.qf`). It has one line per finding:
+
+```text
+iris/domain/demz/requestHandler.go:960:1: error: [High] CICSPlex scope discovery is skipped
+```
+
+Severity maps to the type: Critical/High is `error`, Medium is `warning`, and
+Low is `info`. An accepted review produces an empty file. Load it from the
+worktree root with `nvim -q <file>.qf` or `:cfile <file>.qf`, then `:copen`.
+The picker lists only `.out` files; `ctrl-q` opens the matching `.qf` file.
 
 Additional report commands can reuse the same handler by supplying a nonempty
 `prompt` and an optional array of Copilot arguments (each argument is passed

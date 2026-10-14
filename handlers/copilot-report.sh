@@ -34,9 +34,13 @@ if [[ -n "$review_type" ]]; then
   fi
   review_date="$(date +%F)"
   review_time="$(date +%H-%M)"
-  review_filename="$worktree_root/code-review-${review_type}-${review_date}-${review_time}.{status}.out"
+  review_base="$worktree_root/code-review-${review_type}-${review_date}-${review_time}.{status}"
+  review_filename="${review_base}.out"
+  quickfix_filename="${review_base}.qf"
   prompt+=$'\n\n'
   prompt+="Save the complete review report at ${review_filename}. Replace {status} with reject if there are actionable findings, or accept if there are none. Keep the type, date, and time in the filename unchanged."
+  prompt+=$'\n\n'
+  prompt+="Also save a Neovim quickfix file at ${quickfix_filename}, using the same {status} value as the report. Write one line per actionable finding, in exactly this format: path:line:1: type: [Severity] title. Use the repository-relative path and line from the finding, a single-line title, and type error for Critical or High, warning for Medium, or info for Low. Output only these lines with no headings, blank lines, or extra text. If there are no findings, create an empty file."
 fi
 label="$(jq -r '.label | select(type == "string" and length > 0)' <<<"$json")"
 printf '%s\n' "${label:-$prompt}"
