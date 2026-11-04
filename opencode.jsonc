@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "go-bff": {
+      "path": "~/code/go-bff/",
+      "description": "Use when viewing the codebase for the go-bff API used by much of this app",
+    },
+    "dotfiles": {
+      "path": "~/dotfiles/",
+      "description": "Use to see many of the scripts used by this app.",
+    },
+    "pkm": {
+      "path": "~/pkm/",
+      "description": "Use to see the PKM the go-bff API uses as a source of data. This should be considered production data.",
+    },
+    "playground-pkm": {
+      "path": "../../../",
+      "description": "Use to see a copy of the PKM the go-bff API uses as a source of data. Exists for testing purposes.",
+    },
+  },
+}
