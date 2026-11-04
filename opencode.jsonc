@@ -14,7 +14,7 @@
       "description": "Use to see the PKM the go-bff API uses as a source of data. This should be considered production data.",
     },
     "playground-pkm": {
-      "path": "../../../",
+      "path": "~/code/playgrounds/obsidian-playground/",
       "description": "Use to see a copy of the PKM the go-bff API uses as a source of data. Exists for testing purposes.",
     },
   },
